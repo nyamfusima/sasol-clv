@@ -59,11 +59,19 @@ def age_months(cutoffs, ref):
 # --- fold assembly -----------------------------------------------------------
 
 def assemble(snaps, cutoffs, blocks, bc, extra=None):
-    X = pd.concat([T.select(snaps[c][0], blocks, bc) for c in cutoffs])
+    # Join the extra columns PER CUTOFF, before concatenating. IDs repeat across
+    # snapshots, so joining after the concat is a join on a non-unique index:
+    # pandas expands it many-to-many and the row count no longer matches y.
+    parts = []
+    for c in cutoffs:
+        x = T.select(snaps[c][0], blocks, bc)
+        if extra is not None:
+            x = x.join(extra[c])
+        parts.append(x)
+    X = pd.concat(parts)
     y = pd.concat([snaps[c][1] for c in cutoffs])
     cut = np.concatenate([[c] * len(snaps[c][0]) for c in cutoffs])
-    if extra is not None:
-        X = X.join(pd.concat([extra[c] for c in cutoffs]))
+    assert len(X) == len(y) == len(cut), (len(X), len(y), len(cut))
     return X, y, cut
 
 
