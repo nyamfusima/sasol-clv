@@ -86,7 +86,7 @@ def two_stage(Xtr, ytr, Xva, labels, **kw):
     return out
 
 
-def rule_derived(Xtr, ytr, Xva, labels, cfg, tgt_tr, tgt_va, cats, temp=1.0):
+def rule_derived(Xtr, ytr, Xva, labels, cfg, tgt_tr, cats, temp=1.0):
     """(e) Predict next-quarter net spend per category, then run the published
     label rules over those predictions instead of classifying the label directly.
 
@@ -140,7 +140,8 @@ def rules_to_proba(prev, ever, fsp, fn, cats, cfg, labels, temp=1.0):
 
 # --- (f) class-prior adjustment ----------------------------------------------
 
-def fit_weights(proba, y_true, labels, rounds=4, grid=(0.5, 0.7, 0.85, 1.0, 1.2, 1.5, 2.0, 3.0)):
+def fit_weights(proba, y_true, labels, rounds=4,
+                grid=(0.4, 0.6, 0.8, 1.0, 1.25, 1.6, 2.0, 3.0, 5.0, 8.0)):
     """Coordinate ascent on per-class multipliers, maximising weighted F1."""
     w = np.ones(len(labels))
     best = V.f1(y_true, apply_weights(proba, w, labels))
@@ -169,19 +170,166 @@ def argmax_labels(proba, labels):
     return np.array(labels)[proba.to_numpy().argmax(axis=1)]
 
 
+# --- stage 2: blend the rule-derived variant in, then fit class priors -------
+
+def stage2(cfg, labels, cats, data, bc, blocks, model, out_tag, detail=False):
+    """Takes the winning feature set, then (e) blending and (f) prior weights.
+
+    The prior weights are fitted on one fold and judged only on the other, so a
+    weight vector that merely memorises its own fold cannot be kept.
+    """
+    pc, pr, truth = {}, {}, {}
+    fn = {'single': single, 'two_stage': two_stage}[model]
+    for v in V.FOLDS:
+        D = data[v]
+        Xtr, Xva = select(D['Xtr'], blocks, bc), select(D['Xva'], blocks, bc)
+        pc[v] = fn(Xtr, D['ytr'], Xva, labels)
+        pr[v] = rule_derived(Xtr, D['ytr'], Xva, labels, cfg, D['Ttr'], cats)
+        truth[v] = D['yva'].Opportunity.to_numpy()
+
+    def sc(p):
+        return {v: V.f1(truth[v], argmax_labels(p[v], labels)) for v in V.FOLDS}
+
+    base_sc = sc(pc)
+    rule_sc = sc(pr)
+    print('\n--- (e) rule-derived vs classifier ---')
+    print(f'  classifier : ' + ' | '.join(f'{v} {base_sc[v]:.4f}' for v in V.FOLDS)
+          + f' | mean {np.mean(list(base_sc.values())):.4f}')
+    print(f'  rule-derived: ' + ' | '.join(f'{v} {rule_sc[v]:.4f}' for v in V.FOLDS)
+          + f' | mean {np.mean(list(rule_sc.values())):.4f}')
+    best_w, best_mean = 0.0, np.mean(list(base_sc.values()))
+    print('\n  blend  w*rule + (1-w)*clf:')
+    for w in np.arange(0.1, 1.0, 0.1):
+        b = {v: pr[v] * w + pc[v] * (1 - w) for v in V.FOLDS}
+        s = sc(b)
+        m = np.mean(list(s.values()))
+        both = all(s[v] >= base_sc[v] for v in V.FOLDS)
+        flag = 'both folds up' if both else ''
+        print(f'    w={w:.1f}  ' + ' | '.join(f'{v} {s[v]:.4f}' for v in V.FOLDS)
+              + f' | mean {m:.4f}  {flag}')
+        if both and m > best_mean + 1e-6:
+            best_w, best_mean = float(w), m
+    blended = {v: pr[v] * best_w + pc[v] * (1 - best_w) for v in V.FOLDS} if best_w else pc
+    print(f'  -> blend weight kept: {best_w:.1f} (mean F1 {best_mean:.4f})')
+
+    print('\n--- (f) class-prior adjustment (fit on one fold, judged on the other) ---')
+    bl_sc = sc(blended)
+    weights, held_out = {}, {}
+    for fit_on in V.FOLDS:
+        other = [v for v in V.FOLDS if v != fit_on][0]
+        w, in_f1 = fit_weights(blended[fit_on], truth[fit_on], labels)
+        out_f1 = V.f1(truth[other], apply_weights(blended[other], w, labels))
+        weights[fit_on] = w
+        held_out[other] = out_f1
+        print(f'  fit on {fit_on}: {bl_sc[fit_on]:.4f} -> {in_f1:.4f} (in-fold, ignore) | '
+              f'held-out {other}: {bl_sc[other]:.4f} -> {out_f1:.4f} '
+              f'({out_f1 - bl_sc[other]:+.4f})')
+    keep_prior = all(held_out[v] > bl_sc[v] for v in V.FOLDS)
+    wmean = np.mean([weights[v] for v in V.FOLDS], axis=0)
+    print(f'  -> prior adjustment {"KEPT" if keep_prior else "DROPPED"} '
+          f'(needs a gain on both held-out folds)')
+    if keep_prior:
+        final = {v: blended[v] * wmean for v in V.FOLDS}
+        print('  averaged weights (only classes moved off 1.0):')
+        for l, x in zip(labels, wmean):
+            if abs(x - 1) > 1e-9:
+                print(f'    {l:<42} {x:.3f}')
+    else:
+        final = blended
+    fin_sc = sc(final)
+    mean = float(np.mean(list(fin_sc.values())))
+    print('\n--- final label model ---')
+    for v in V.FOLDS:
+        print(f'  fold {v}: {fin_sc[v]:.4f}')
+    print(f'  mean: {mean:.4f}')
+    if detail:
+        V.report('best variant', {v: (truth[v], argmax_labels(final[v], labels)) for v in V.FOLDS},
+                 labels, show_detail=True)
+    # out-of-fold probabilities for later ensembling
+    PRED_DIR.mkdir(exist_ok=True)
+    oof = pd.concat([final[v].assign(_fold=v) for v in V.FOLDS])
+    oof.rename_axis('ID').reset_index().to_parquet(PRED_DIR / f'oof_proba_{out_tag}.parquet', index=False)
+    print(f'  wrote preds/oof_proba_{out_tag}.parquet ({len(oof)} rows)')
+    return dict(blocks=blocks, model=model, blend_w=best_w,
+                weights=(wmean.tolist() if keep_prior else None), mean=mean, folds=fin_sc)
+
+
 # --- sweep -------------------------------------------------------------------
+
+def write_submission(cfg, labels, cats, spec, train_path, test_path, baseline_csv, out_csv):
+    """Retrain the winning label model on every snapshot and replace only the
+    Opportunity column of the baseline submission."""
+    cutoffs = S.monthly(V.FIRST_CUTOFF, V.LAST_CUTOFF)
+    snaps = S.load(cutoffs + [TEST_CUTOFF], train_path, cfg, ALL_BLOCKS,
+                   label_cutoffs=cutoffs, verbose=False)
+    tgts = S.load_category_targets(cutoffs, train_path, cfg, verbose=False)
+    bc = block_columns(list(snaps[cutoffs[0]][0].columns))
+    Xtr = pd.concat([snaps[c][0] for c in cutoffs])
+    ytr = pd.concat([snaps[c][1] for c in cutoffs])
+    Ttr = pd.concat([tgts[c] for c in cutoffs])
+    Xte = snaps[TEST_CUTOFF][0]
+    blocks = tuple(spec['blocks'])
+    xa, xb = select(Xtr, blocks, bc), select(Xte, blocks, bc)
+    fn = {'single': single, 'two_stage': two_stage}[spec['model']]
+    p = fn(xa, ytr, xb, labels)
+    print(f'  trained on {len(Xtr)} rows from {len(cutoffs)} snapshots')
+    if spec['blend_w']:
+        pr = rule_derived(xa, ytr, xb, labels, cfg, Ttr, cats)
+        p = pr * spec['blend_w'] + p * (1 - spec['blend_w'])
+    if spec['weights']:
+        pred = apply_weights(p, np.array(spec['weights']), labels)
+    else:
+        pred = argmax_labels(p, labels)
+    out = pd.Series(pred, index=Xte.index, name='Opportunity')
+
+    base = pd.read_csv(baseline_csv, dtype={'ID': str})
+    test_ids = pd.read_csv(test_path, dtype=str).ID
+    sub = base.set_index('ID').reindex(test_ids)
+    assert sub[['CLV_fuel', 'CLV_nonfuel']].notna().all().all(), 'baseline is missing test IDs'
+    new = out.reindex(test_ids)
+    assert new.notna().all(), 'some test customers have no label prediction'
+    before = sub.Opportunity.to_numpy()
+    sub['Opportunity'] = new.to_numpy()
+    # check before writing, never after
+    bad = set(sub.Opportunity) - set(labels)
+    assert not bad, f'labels outside the config: {bad}'
+    assert len(sub) == 5488, f'expected 5488 rows, got {len(sub)}'
+    assert sub.index.equals(pd.Index(test_ids)), 'IDs do not match data/test.csv'
+    assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
+    Path(out_csv).parent.mkdir(exist_ok=True)
+    sub.rename_axis('ID').reset_index().to_csv(out_csv, index=False)
+    print(f'\nWrote {out_csv}: {len(sub)} rows, IDs match data/test.csv, '
+          f'all labels in config, CLV columns untouched')
+    print(f'changed Opportunity for {(before != sub.Opportunity.to_numpy()).sum()} of {len(sub)} customers')
+    print(sub.Opportunity.value_counts(normalize=True).round(4).to_string())
+    return sub
+
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--train', default='data/train.csv')
+    ap.add_argument('--test', default='data/test.csv')
     ap.add_argument('--config', default='src/label_config.json')
     ap.add_argument('--only', default='', help='comma-separated variant names')
     ap.add_argument('--detail', action='store_true', help='per-class F1 + confusion matrix')
+    ap.add_argument('--mode', default='sweep', choices=['sweep', 'stage2', 'submit'])
+    ap.add_argument('--blocks', default='base,growth,recency', help='stage2/submit feature blocks')
+    ap.add_argument('--model', default='single', choices=['single', 'two_stage'])
+    ap.add_argument('--tag', default='label_v2')
+    ap.add_argument('--baseline', default='submissions/submission_baseline_v1.csv')
+    ap.add_argument('--out', default='submissions/submission_label_v2.csv')
+    ap.add_argument('--spec', default='preds/label_v2_spec.json')
     a = ap.parse_args()
     cfg = json.load(open(a.config))
     labels = cfg['opportunity_labels']
     cats = S.categories(cfg)
     want = set(x.strip() for x in a.only.split(',') if x.strip())
+
+    if a.mode == 'submit':
+        spec = json.loads(Path(a.spec).read_text())
+        print(f'label model spec: {spec}')
+        write_submission(cfg, labels, cats, spec, a.train, a.test, a.baseline, a.out)
+        return
 
     cutoffs = S.monthly(V.FIRST_CUTOFF, V.LAST_CUTOFF)
     snaps = S.load(cutoffs, a.train, cfg, ALL_BLOCKS)
@@ -198,6 +346,13 @@ def main():
             ytr=pd.concat([snaps[c][1] for c in tr]),
             Ttr=pd.concat([tgts[c] for c in tr]),
             Xva=snaps[v][0], yva=snaps[v][1], Tva=tgts[v])
+
+    if a.mode == 'stage2':
+        blocks = tuple(x.strip() for x in a.blocks.split(',') if x.strip())
+        spec = stage2(cfg, labels, cats, data, bc, blocks, a.model, a.tag, detail=a.detail)
+        Path(a.spec).write_text(json.dumps(spec, indent=2))
+        print(f'  wrote {a.spec}')
+        return
 
     rows, probas = [], {}
 
@@ -226,7 +381,7 @@ def main():
         ('base', 'growth', 'recency'))
     # -- e) rule-derived -------------------------------------------------------
     run('e_rule', lambda Xtr, ytr, Xva, L_, D: rule_derived(
-        Xtr, ytr, Xva, L_, cfg, D['Ttr'], D['Tva'], cats), ('base', 'growth', 'recency'))
+        Xtr, ytr, Xva, L_, cfg, D['Ttr'], cats), ('base', 'growth', 'recency'))
 
     print('\n' + '=' * 78)
     print(f'{"variant":<16}{"fold 2025-06":>14}{"fold 2025-09":>14}{"mean":>10}  note')
