@@ -21,6 +21,29 @@ LAST_CUTOFF = '2025-09-01'
 FIRST_CUTOFF = '2024-06-01'
 GROUPS = ['Fuel growth', 'Inactivity', 'Stable', 'Other']
 
+# Leaderboard formula. Higher is better.
+#   Score = 0.4*F1 + 0.3*(1 - RMSE_fuel/0.74) + 0.3*(1 - RMSE_nonfuel/0.816)
+# Gradients: +0.4 per unit F1, -0.3/0.74 = -0.4054 per unit RMSE_fuel,
+# -0.3/0.816 = -0.3676 per unit RMSE_nonfuel. A 0.005 RMSE drop is therefore
+# worth about as much as a 0.005 F1 gain; every decision uses `combined`.
+FUEL_NORM = 0.74
+NONFUEL_NORM = 0.816
+W_F1, W_FUEL, W_NONFUEL = 0.4, 0.3, 0.3
+
+
+def combined(f1_, rmse_fuel, rmse_nonfuel):
+    return (W_F1 * f1_
+            + W_FUEL * (1 - rmse_fuel / FUEL_NORM)
+            + W_NONFUEL * (1 - rmse_nonfuel / NONFUEL_NORM))
+
+
+def score_row(name, f1_, rmse_fuel, rmse_nonfuel, ref=None):
+    """One line per variant on the single number that decides things."""
+    s = combined(f1_, rmse_fuel, rmse_nonfuel)
+    d = '' if ref is None else f'  ({s - ref:+.5f} vs ref)'
+    return (f'{name:<34} F1 {f1_:.4f} | rmse_f {rmse_fuel:.4f} | '
+            f'rmse_nf {rmse_nonfuel:.4f} | score {s:.5f}{d}')
+
 
 def group(labels):
     """Collapse the 17 classes to the four buckets worth eyeballing."""

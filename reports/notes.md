@@ -100,6 +100,30 @@ Fuel growth 0.45 -> 0.60 would be worth about +0.040.
   per-category spend regressors' training target, read from training snapshots
   only (`tgt_tr`); the validation-cutoff copy is deliberately never loaded.
 
+## Leaderboard scoring formula (confirmed 5 Oct)
+
+    Score = 0.4*F1 + 0.3*(1 - RMSE_fuel/0.74) + 0.3*(1 - RMSE_nonfuel/0.816)
+
+Higher is better. `src/validate.py` exposes `combined()` and `score_row()`; every
+decision from here uses that single number.
+
+Gradients: +0.4 per unit F1, -0.4054 per unit RMSE_fuel, -0.3676 per unit
+RMSE_nonfuel. A 0.005 RMSE drop is worth about as much as a 0.005 F1 gain, so the
+three GO bars (+0.005 F1, -0.005 on each RMSE) are worth +0.00200, +0.00203 and
++0.00184 score -- deliberately comparable.
+
+Reference points on this formula:
+| What | F1 | RMSE fuel | RMSE nonfuel | Score |
+| --- | --- | --- | --- | --- |
+| baseline val fold 2025-06 | 0.4949 | 0.5998 | 0.7418 | 0.28208 |
+| baseline val fold 2025-09 | 0.5047 | 0.6052 | 0.7489 | 0.28120 |
+| our public | 0.512 | 0.595 | 0.724 | 0.29741 |
+| 1st public | 0.557 | 0.589 | 0.722 | 0.31858 |
+
+The public gap to 1st is 0.02117, and it is 85% label: F1 contributes +0.01800,
+RMSE fuel +0.00243, RMSE nonfuel +0.00074. Regression work is cheap and does
+count, but F1 is where the race is decided.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
