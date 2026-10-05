@@ -150,6 +150,24 @@ There is no distribution shift here that down-weighting old snapshots corrects
 for -- you only lose effective sample size. Do not revisit unless the label mix
 starts moving faster than it has.
 
+### A2 snapshot spacing (classifier) -- all dropped, but informative
+| variant | snaps (fold 2) | fold 2025-06 | fold 2025-09 | mean F1 | delta | kept |
+| --- | --- | --- | --- | --- | --- | --- |
+| reference monthly | 13 | 0.4953 | 0.5058 | 0.5006 | - | reference |
+| every 2 months | 7 | 0.4944 | 0.5072 | 0.5008 | +0.0002 | dropped |
+| quarterly non-overlapping | 5 | 0.4937 | 0.5062 | 0.4999 | -0.0006 | dropped |
+
+Neither clears the bar, but the real finding is that **cutting the training set
+from 13 snapshots to 5 costs essentially nothing** (-0.0006). Monthly snapshots
+overlap heavily -- the same customers, outcome windows sliding by one month -- so
+the extra rows are near-duplicates carrying little independent information. The
+training signal is already saturated at quarterly spacing.
+
+Two consequences:
+- Quarterly spacing is 2.6x cheaper for the same F1. Use it for fast iteration.
+- It predicts block D will fail: if going from 13 to 5 snapshots is free, going
+  from 13 to ~53 (weekly) should add nothing either. D is the direct test.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
