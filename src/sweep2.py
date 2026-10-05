@@ -939,3 +939,170 @@ def write_probes(ctx):
 BLOCKS['fref'] = block_fref
 BLOCKS['f'] = block_f
 BLOCKS['probes'] = lambda ctx, ref: write_probes(ctx)
+
+
+# --- submission v2 from the kept stack ---------------------------------------
+
+def kept_stack():
+    """What sweep 2 actually kept: per-target spacing from D, regression recipe
+    from B1/B3, classifier from C/E. Defaults to the bagged reference +
+    monthly + hurdle if a block has not run."""
+    saved = json.loads(RESULTS.read_text()) if RESULTS.exists() else {}
+    spacing = {'f1': 'monthly', 'rf': 'monthly', 'rn': 'monthly'}
+    spacing.update((saved.get('d') or {}).get('winners', {}) or {})
+    reg_kind = 'direct'
+    for d in saved.get('b1', []):
+        if 'hurdle' in d['name'] and d.get('kept') == 'KEPT':
+            reg_kind = 'hurdle'
+    for d in saved.get('b3', []):
+        if d.get('kept') == 'KEPT':
+            reg_kind = 'hurdle_avg' if 'average' in d['name'] else 'hurdle_cat'
+    clf = 'reference'
+    for blk in ('c', 'e'):
+        rows = saved.get(blk)
+        rows = rows.get('rows', []) if isinstance(rows, dict) else (rows or [])
+        for d in rows:
+            if d.get('kept') == 'KEPT':
+                clf = d['name']
+    return dict(spacing=spacing, reg_kind=reg_kind, classifier=clf)
+
+
+def stack_validation_score(stack):
+    """Composite of the per-target validation measurements actually taken: F1
+    from the classifier's winning spacing, each RMSE from its own winner."""
+    saved = json.loads(RESULTS.read_text())
+    ref = saved['ref'][0]
+    got = {'f1': ref['f1'], 'rf': ref['rf'], 'rn': ref['rn']}
+    for d in saved.get('b1', []):
+        if 'hurdle' in d['name'] and d.get('kept') == 'KEPT':
+            got['rf'], got['rn'] = d['rf'], d['rn']
+    per = (saved.get('d') or {}).get('per_target', {})
+    for comp in ('f1', 'rf', 'rn'):
+        want = stack['spacing'][comp]
+        if want == 'monthly':
+            continue
+        for d in per.get(comp, []):
+            if d['name'] == f'd {want}':
+                got[comp] = d[comp]
+    r = Row('submission_v2 stack', got['f1'], got['rf'], got['rn'])
+    return r
+
+
+def build_v2(ctx, out='submissions/submission_v2.csv'):
+    stack = kept_stack()
+    print(f'kept stack: {json.dumps(stack)}')
+    assert stack['classifier'] == 'reference', \
+        f'classifier variant {stack["classifier"]} passed; wire it in before building'
+    Xte = T.select(ctx.snaps[TEST_CUTOFF][0], ('base',), ctx.bc)
+
+    # classifier at its own winning spacing
+    cuts = schedule(TEST_CUTOFF, stack['spacing']['f1'])
+    ctx.pool(cuts)
+    Xtr, ytr, _ = assemble(ctx.snaps, cuts, ('base',), ctx.bc)
+    print(f'  classifier: {stack["spacing"]["f1"]}, {len(cuts)} snapshots, {len(Xtr)} rows')
+    proba = bag_clf(Xtr, ytr.Opportunity.map(ctx.code).to_numpy(), Xte, ctx.labels)
+    opp = T.argmax_labels(proba, ctx.labels)
+
+    # each regression at its own winning spacing
+    preds = {}
+    for comp, tgt in (('rf', 'CLV_fuel'), ('rn', 'CLV_nonfuel')):
+        cuts = schedule(TEST_CUTOFF, stack['spacing'][comp])
+        ctx.pool(cuts)
+        X, y, _ = assemble(ctx.snaps, cuts, ('base',), ctx.bc)
+        print(f'  {tgt}: {stack["spacing"][comp]}, {len(cuts)} snapshots, {len(X)} rows, '
+              f'recipe {stack["reg_kind"]}')
+        preds[tgt] = reg_predict(dict(Xtr=X, ytr=y, Xva=Xte, w=None), tgt, stack['reg_kind'])
+
+    test_ids = pd.read_csv('data/test.csv', dtype=str).ID
+    sub = pd.DataFrame({'CLV_fuel': preds['CLV_fuel'], 'CLV_nonfuel': preds['CLV_nonfuel'],
+                        'Opportunity': opp}, index=Xte.index).reindex(test_ids)
+    # validate before writing, never after
+    assert len(sub) == 5488, f'expected 5488 rows, got {len(sub)}'
+    assert sub.index.equals(pd.Index(test_ids)), 'IDs do not match data/test.csv'
+    assert sub.notna().all().all(), 'missing predictions'
+    bad = set(sub.Opportunity) - set(ctx.labels)
+    assert not bad, f'labels outside the config: {bad}'
+    neg = (sub[['CLV_fuel', 'CLV_nonfuel']] < 0).sum().sum()
+    assert neg == 0, f'{neg} negative CLV values'
+    assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
+    Path(out).parent.mkdir(exist_ok=True)
+    sub.rename_axis('ID').reset_index().to_csv(out, index=False)
+
+    r = stack_validation_score(stack)
+    print(f'\nWrote {out}: {len(sub)} rows | IDs match data/test.csv | '
+          f'{sub.Opportunity.nunique()} distinct labels, all in config | '
+          f'CLV min {sub[["CLV_fuel", "CLV_nonfuel"]].min().min():.4f} (>= 0)')
+    print('\nvalidation score of this stack vs the references:')
+    print(f'  single-seed baseline          0.28164')
+    print(f'  5-seed bagged reference       0.28342')
+    print(f'  bagged + hurdle (B1)          0.28553')
+    print(f'  submission_v2 stack           {r.mean_score:.5f}   '
+          f'(folds {r.score(0):.5f} / {r.score(1):.5f})')
+    print(f'  components: F1 {r.f1[0]:.4f}/{r.f1[1]:.4f} | '
+          f'rmse_f {r.rf[0]:.4f}/{r.rf[1]:.4f} | rmse_nf {r.rn[0]:.4f}/{r.rn[1]:.4f}')
+    print(f'\n  label mix:')
+    print(sub.Opportunity.value_counts(normalize=True).round(4).head(8).to_string())
+    save('v2', dict(stack=stack, score=r.as_dict()))
+    return sub
+
+
+BLOCKS['v2'] = lambda ctx, ref: build_v2(ctx)
+
+
+# --- re-judge saved results under the current rule ---------------------------
+
+# which components each block's variants actually change, and what they are
+# measured against ('ref' = bagged reference, 'b1' = the kept hurdle)
+BLOCK_SCOPE = {'a1': (('f1',), 'ref'), 'a2': (('f1',), 'ref'), 'a3': (('f1',), 'ref'),
+               'a4': (('f1',), 'ref'), 'b1': (('rf', 'rn'), 'ref'),
+               'b2': (('rf', 'rn'), 'ref'), 'b3': (('rf', 'rn'), 'b1'),
+               'c': (('f1',), 'ref'), 'e': (('f1',), 'ref')}
+
+
+def rejudge():
+    """Re-apply the current rule to every saved block and persist the verdicts.
+
+    Needed because blocks run before the rule change stored verdicts from the
+    old per-target bars; kept_stack() reads those verdicts, so a stale 'dropped'
+    on the hurdle would silently drop it from the submission.
+    """
+    saved = json.loads(RESULTS.read_text())
+    def mk(d, touches=None):
+        r = Row(d['name'], d['f1'], d['rf'], d['rn'], touches=touches or d.get('touches'))
+        return r
+    ref = mk(saved['ref'][0], ('f1', 'rf', 'rn'))
+    bases = {'ref': ref}
+    for d in saved.get('b1', []):
+        if 'hurdle' in d['name']:
+            bases['b1'] = mk(d, ('rf', 'rn'))
+    changed = []
+    for blk, (touches, base_key) in BLOCK_SCOPE.items():
+        rows = saved.get(blk)
+        if rows is None:
+            continue
+        is_dict = isinstance(rows, dict)
+        lst = rows.get('rows', []) if is_dict else rows
+        base = bases.get(base_key, ref)
+        built = [mk(d, touches) for d in lst]
+        variants = [r for r in built if r.name != base.name and 'current best' not in r.name]
+        judge([base] + variants, base)
+        for d, r in zip(lst, built):
+            if r in variants:
+                was = d.get('kept', '')
+                d['kept'], d['note'] = r.kept, r.note
+                d['touches'] = list(r.touches)
+                if was != r.kept:
+                    changed.append(f'{blk}: "{d["name"]}" {was or "?"} -> {r.kept}')
+            else:
+                d['kept'] = 'reference'
+        saved[blk] = rows
+    RESULTS.write_text(json.dumps(saved, indent=2))
+    print('re-judged under the current rule:')
+    for c in changed:
+        print(f'  {c}')
+    if not changed:
+        print('  (no verdict changed)')
+    return saved
+
+
+BLOCKS['rejudge'] = lambda ctx, ref: rejudge()
