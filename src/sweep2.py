@@ -803,6 +803,19 @@ if __name__ == '__main__':
 # --- F) new information ------------------------------------------------------
 
 F_CACHE = Path('preds/fblocks.parquet')
+_RICH = {}
+
+
+def rich_data(ctx):
+    """load_rich memoised: block F calls this once per group and the Decimal
+    rescaling in label_rules.prepare makes a reload expensive."""
+    import features2 as F2
+    if 'd' not in _RICH:
+        t0 = time.time()
+        _RICH['d'], _RICH['dall'] = F2.load_rich(ctx.train, ctx.cfg)
+        print(f'  loaded rich transactions in {time.time() - t0:.0f}s '
+              f'(memoised for the remaining groups)', flush=True)
+    return _RICH['d'], _RICH['dall']
 
 
 def f_snapshots(ctx, groups, cutoffs):
@@ -821,9 +834,15 @@ def f_snapshots(ctx, groups, cutoffs):
                 out[str(c)] = g.drop(columns=['_cutoff', '_key']).set_index('ID')
             if all(c in out for c in cutoffs):
                 return {c: out[c] for c in cutoffs}
-    d, dall = F2.load_rich(ctx.train, ctx.cfg)
+    d, dall = rich_data(ctx)
     mono = ctx.monthly
-    home = {c: F2.home_site(d[d._time < pd.Timestamp(c)], ctx.snaps[c][0].index) for c in mono}
+    # only F2 needs the home-site history, and it is the same for every group
+    if 'f2' in groups and 'home' not in _RICH:
+        t0 = time.time()
+        _RICH['home'] = {c: F2.home_site(d[d._time < pd.Timestamp(c)],
+                                         ctx.snaps[c][0].index) for c in mono}
+        print(f'  built home-site history in {time.time() - t0:.0f}s (memoised)', flush=True)
+    home = _RICH.get('home', {})
     labs = {c: ctx.snaps[c][1] for c in mono}
     out = {}
     for c in cutoffs:
