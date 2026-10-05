@@ -240,6 +240,36 @@ while failing the per-target bars. The per-component bars and "all decisions use
 one number" disagree here. Not resolved unilaterally; see whether B2/B3 stack on
 top before deciding.
 
+### B2 recency / spacing (regressions) -- all dropped, and it inverts A2
+Positive delta = higher RMSE = worse.
+
+| variant | CLV_fuel delta | CLV_nonfuel delta |
+| --- | --- | --- |
+| recency half-life 3mo | +0.00216 | +0.00255 |
+| recency half-life 6mo | +0.00069 | +0.00135 |
+| recency half-life 12mo | +0.00056 | +0.00087 |
+| spacing every 2 months | +0.00224 | +0.00155 |
+| spacing quarterly | +0.00261 | +0.00279 |
+
+Recency repeats A1's monotone pattern on both regressions and converges to the
+reference from above. **Recency weighting is settled across all three targets:
+it only costs effective sample size. Stop testing it.**
+
+Spacing inverts A2. Quarterly cost the classifier just 0.0006 F1 but costs the
+regressions +0.0026 / +0.0028 RMSE: the regressions want MORE snapshots, the
+classifier does not care. This matches the bagging result (regressions -0.0020 /
+-0.0018, F1 only +0.0008). The theme across both sweeps is that variance
+reduction helps the continuous targets and barely moves argmax.
+
+Two consequences:
+- **The A2-based prediction that block D would fail was wrong**, because A2 only
+  measured the classifier. Revised: D should be flat for the classifier but may
+  genuinely help the regressions.
+- **Block F runs quarterly**, which costs the regressions ~0.0026 / ~0.0028.
+  Comparing F variants against the quarterly reference is still sound, but any F
+  group that helps must be re-measured at monthly spacing before it goes into a
+  submission.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
