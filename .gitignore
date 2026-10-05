@@ -1,0 +1,9 @@
+data/*
+!data/README.md
+submissions/*.csv
+preds/*
+!preds/.gitkeep
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
