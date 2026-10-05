@@ -217,6 +217,29 @@ pinned near 0.50** on this feature set regardless of weighting, data density,
 capacity or library. What is left that could move it: changing what gets
 predicted (blocks C and E), or genuinely new information (block F).
 
+### B1 hurdle regression -- fails the stated bar, but wins on the score
+| target | fold 2025-06 | fold 2025-09 | mean | delta | bar -0.005 |
+| --- | --- | --- | --- | --- | --- |
+| reference CLV_fuel | 0.5977 | 0.6033 | 0.6005 | - | - |
+| hurdle CLV_fuel | 0.5975 | 0.5994 | 0.5984 | -0.00207 | not met |
+| reference CLV_nonfuel | 0.7397 | 0.7474 | 0.7436 | - | - |
+| hurdle CLV_nonfuel | 0.7352 | 0.7450 | 0.7401 | -0.00348 | not met |
+
+P(y>0) times a regressor fitted on positive rows only. Better on all four
+fold x target cells -- the first consistent improvement found in two sweeps --
+but neither target reaches the -0.005 bar.
+
+The mechanism is confirmed rather than assumed: non-fuel is about 65% zeros per
+quarter and fuel about 29%, and the hurdle helps non-fuel (-0.0035) more than
+fuel (-0.0021), ordered exactly by zero-inflation.
+
+**Open decision.** Combined score 0.28553 vs 0.28342 = +0.00211, which exceeds
+the +0.00200 a passing Opportunity variant would be worth. So the hurdle pays
+more in the leaderboard's own currency than an F1 variant that clears its bar,
+while failing the per-target bars. The per-component bars and "all decisions use
+one number" disagree here. Not resolved unilaterally; see whether B2/B3 stack on
+top before deciding.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
