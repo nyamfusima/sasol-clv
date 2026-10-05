@@ -191,6 +191,32 @@ Lesson recorded: fold 1 is the only legitimate selection set here, because early
 stopping already spends it. Anything chosen on fold 2 must be re-measured before
 it can be believed.
 
+### A4 CatBoost (classifier) -- dropped, averaging not triggered
+| variant | fold 2025-06 | fold 2025-09 | mean F1 | delta | kept |
+| --- | --- | --- | --- | --- | --- |
+| reference (LightGBM, 5-seed bag) | 0.4953 | 0.5058 | 0.5006 | - | reference |
+| catboost (5-seed bag, depth 6) | 0.4931 | 0.4936 | 0.4933 | -0.0072 | dropped |
+
+The |catboost - lgbm| mean F1 gap is 0.0072, outside the 0.005 window, so the
+probability-averaging arm was correctly not attempted. CatBoost is also 154s per
+17-class fit vs about 22s for LightGBM -- 7x the cost for a worse result, so it
+is not worth revisiting on the classifier. (Its regressors are a different
+story, 9s per fit and level with LightGBM: see B3.)
+
+### Block A summary -- every training-recipe lever is flat
+| lever | best variant | delta mean F1 | verdict |
+| --- | --- | --- | --- |
+| A1 recency weighting | half-life 12mo | +0.0001 | dropped |
+| A2 snapshot spacing | every 2 months | +0.0002 | dropped |
+| A3 capacity grid | leaves31 mcs100 cols0.7 | -0.0004 | dropped |
+| A4 CatBoost | - | -0.0072 | dropped |
+
+Nothing in the training recipe moves the classifier. Combined with sweep 1
+(features, decision rules) the picture is that **17-class argmax weighted F1 is
+pinned near 0.50** on this feature set regardless of weighting, data density,
+capacity or library. What is left that could move it: changing what gets
+predicted (blocks C and E), or genuinely new information (block F).
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
