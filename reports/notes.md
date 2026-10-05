@@ -333,6 +333,34 @@ about +0.020. So the race is **Fuel growth vs Stable discrimination**, which is
 also exactly where the confusion matrix has always been worst (432 of 1435 true
 Fuel growth predicted Stable, 362 of 1404 true Stable predicted Fuel growth).
 
+### E rule-component classifiers -- both dropped
+| variant | fold 2025-06 | fold 2025-09 | mean F1 | delta | kept |
+| --- | --- | --- | --- | --- | --- |
+| reference | 0.4953 | 0.5058 | 0.5006 | - | reference |
+| e1 stacked event probabilities | 0.4920 | 0.5062 | 0.4991 | -0.0014 | dropped |
+| e2 events through a simple rule | 0.4515 | 0.4492 | 0.4504 | -0.0502 | dropped |
+
+Four binary rule events (inactive, Fuel qualifies as growth, any non-fuel
+category qualifies, any adoption candidate), trained on labels derived from
+label_rules and fed in as out-of-fold features built strictly forward in time.
+
+e1 is flat-to-slightly-negative: fold 2 gains 0.0004 while fold 1 loses 0.0033.
+The forward-in-time construction is part of the cost -- the earliest snapshots
+have no earlier outcomes to train the event models on, so those rows carry NaN
+event features, and fold 1 has fewer usable snapshots than fold 2. That the
+better fold is the one with more event coverage is at least consistent, but the
+effect is too small to act on.
+
+e2 is much worse (-0.05), which is expected: collapsing to five hard outcomes
+throws away every adoption sub-class and both minor growth classes.
+
+**Combined with C, this closes the "change what gets predicted" route.** C showed
+the adoption signal exists (AUC 0.745) but cannot be monetised. E shows that
+handing the classifier an explicit "will Fuel qualify as growth" probability
+does not move the Fuel-growth/Stable boundary either. The boundary is not
+reachable by re-routing these features, so block F's new information is the only
+remaining lever.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
