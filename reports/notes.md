@@ -280,6 +280,26 @@ Two consequences:
   group that helps must be re-measured at monthly spacing before it goes into a
   submission.
 
+### B3 CatBoost on top of the hurdle -- dropped; gains stack but decay fast
+Measured on top of the kept hurdle, not the original reference.
+
+| variant | rmse_fuel | rmse_nonfuel | score delta | kept |
+| --- | --- | --- | --- | --- |
+| b1 hurdle [current best] | 0.5984 | 0.7401 | - | reference |
+| hurdle + catboost magnitude | 0.5974 (-0.00100) | 0.7391 (-0.00093) | +0.00075 | dropped |
+| hurdle lgbm/catboost average | 0.5977 (-0.00072) | 0.7395 (-0.00057) | +0.00050 | dropped |
+
+Both improve all four fold x target cells but reach under half the 0.0015 bar.
+
+**Do gains stack? Yes, with steep diminishing returns.** The hurdle gave +0.00212
+over the reference; CatBoost on top adds +0.00075. Zero-inflation was the
+dominant effect and the choice of magnitude model is secondary.
+
+Note for any future regression work: CatBoost magnitude alone (+0.00075) beats
+the LightGBM/CatBoost average (+0.00050), so CatBoost's magnitude model is
+genuinely better on positive rows rather than merely decorrelated -- averaging
+dilutes it, which is the opposite of the usual rationale for averaging.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
