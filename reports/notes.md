@@ -9,6 +9,13 @@
 - Inactivity rises every quarter (7% to 27%); expect about 29% in test.
 - Early snapshots have short history, so adoption is inflated there (`hist_days` feature covers this).
 
+## Setup verified (5 Oct)
+- Env: Python 3.13, pandas 3.0.6, numpy 2.5.3, scikit-learn 1.9.1, lightgbm 4.7.0.
+- `python src/baseline.py` reproduces exactly: RMSE fuel 0.6052 | RMSE nonfuel 0.7489 | weighted F1 0.5047
+  (13 train snapshots, 53,025 rows). Output is bit-identical to `submissions/submission_baseline_v1.csv`.
+- Data copied from `~/Downloads/train (1).csv` / `test (1).csv` / `SampleSubmission.csv`; 467,880 rows, 5,488 test IDs.
+- Note: `~/Downloads/Train.csv` / `Test.csv` belong to a different competition, do not use them.
+
 ## Plan
 1. Label model: growth vs stable vs inactive. Key signal: was last quarter unusually low.
 2. Derive the label from predicted per-category spend, blend with the direct classifier.
