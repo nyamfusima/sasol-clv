@@ -168,6 +168,29 @@ Two consequences:
 - It predicts block D will fail: if going from 13 to 5 snapshots is free, going
   from 13 to ~53 (weekly) should add nothing either. D is the direct test.
 
+### A3 capacity grid (classifier) -- dropped on both selection routes
+18 configs over num_leaves {7,15,31} x min_child_samples {30,100,300} x
+colsample {0.4,0.7}, n_estimators by early stopping on fold 1 then fixed.
+
+The grid is flat: fold-2 single-seed F1 spans 0.4937..0.5037, a 0.0099 range.
+Early stopping picks 103..224 trees where the baseline uses 400, so the baseline
+is over-trained -- yet the 5-seed bagged reference (fold 2 0.5058) beats every
+single-seed config in the grid. Bagging is worth more here than tuning.
+
+| selection route | config | fold 2 | vs ref fold 2 |
+| --- | --- | --- | --- |
+| on fold 1 (honest, fold 2 left clean) | leaves 15, mcs 30, cols 0.4, n 164 | 0.4951 | -0.0107 |
+| on fold 2 (selection-biased) | leaves 31, mcs 100, cols 0.7, n 103 | 0.5037 | +0.0021* |
+
+\* not a check: it is the max of 18 configs measured on the same fold.
+Re-bagged on both folds it gives 0.4984 / 0.5019, mean 0.5002 vs the reference
+0.5006 -- **dropped**. The apparent +0.0021 collapsed to -0.0004 once the
+selection bias was removed, which is what selection bias looks like.
+
+Lesson recorded: fold 1 is the only legitimate selection set here, because early
+stopping already spends it. Anything chosen on fold 2 must be re-measured before
+it can be believed.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
