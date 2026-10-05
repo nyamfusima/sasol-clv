@@ -361,6 +361,56 @@ does not move the Fuel-growth/Stable boundary either. The boundary is not
 reachable by re-routing these features, so block F's new information is the only
 remaining lever.
 
+### D cutoff density, decided per target -- monthly wins all three
+| target | fortnightly | weekly | winner |
+| --- | --- | --- | --- |
+| Opportunity (mean F1) | -0.0020 | -0.0017 | monthly |
+| CLV_fuel (mean RMSE) | +0.00082 | +0.00103 | monthly |
+| CLV_nonfuel (mean RMSE) | +0.00145 | +0.00079 | monthly |
+
+**Monthly is a genuine optimum, not an endpoint.** Combining B2 and D within each
+recipe:
+- thinning (B2, direct): monthly 0.6005 -> quarterly 0.6031, +0.0026 worse
+- densifying (D, hurdle): monthly 0.5984 -> weekly 0.5994, +0.0010 worse
+
+**My prediction that weekly would help the regressions was wrong**, and the error
+is instructive: B2 showed thinning hurt them and I extrapolated that densifying
+would help. That is invalid across an optimum.
+
+Likely mechanism: consecutive weekly cutoffs share about 97% of their outcome
+window, so extra snapshots add no information while re-weighting the training
+distribution toward long-tenured customers who are eligible in more snapshots --
+at 4x the compute. Duplicating near-identical rows biases the sample rather than
+enriching it.
+
+The per-target rule selected the same spacing for all three targets, but the
+targets were free to disagree and the answer is now measured rather than assumed.
+**The "more training data" lever is closed in both directions.**
+
+## Sweep 2 complete -- 1 kept of 17 variants
+| block | best delta score | verdict |
+| --- | --- | --- |
+| A1 recency weighting | +0.00004 | dropped |
+| A2 snapshot spacing | +0.00009 | dropped |
+| A3 capacity grid | -0.00015 | dropped |
+| A4 CatBoost classifier | -0.00289 | dropped |
+| **B1 hurdle regressions** | **+0.00212** | **KEPT** |
+| B2 recency / spacing (reg) | -0.00055 | dropped |
+| B3 CatBoost regressions | +0.00075 | dropped |
+| C adoption oracle relabel | +0.00039 | dropped |
+| D cutoff density | -0.00029 | dropped |
+| E rule-component classifiers | -0.00058 | dropped |
+
+Score ladder: single-seed 0.28164 -> 5-seed bagged 0.28342 (+0.00178) ->
+bagged + hurdle 0.28553 (+0.00212). Total +0.00389, about 18% of the 0.02117
+public gap to 1st.
+
+Both wins are regression-side and both are variance-reduction. **F1 has not
+moved from ~0.50 across 13 attempts** spanning features, decision rules, sample
+weighting, data density, model capacity, library choice, class priors,
+two-stage structure, rule derivation, rule-event stacking and adoption
+relabelling. The classifier ceiling on these features is real.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
