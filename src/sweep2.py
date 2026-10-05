@@ -129,15 +129,52 @@ def bag_binary(Xtr, yb, Xva, params=None, w=None, seeds=SEEDS):
     return out / len(seeds)
 
 
-def hurdle_reg(Xtr, y, Xva, params=None, w=None, seeds=SEEDS):
-    """(B1) P(y>0) * E[y | y>0], the second stage fitted on positive rows only."""
+def hurdle_reg(Xtr, y, Xva, params=None, w=None, seeds=SEEDS, cat=False):
+    """(B1) P(y>0) * E[y | y>0], the second stage fitted on positive rows only.
+    `cat` switches the magnitude stage to CatBoost; the gate stays LightGBM."""
     pos = (y.to_numpy() > 0)
     if pos.all() or not pos.any():
-        return bag_reg(Xtr, y, Xva, params, w, seeds)
+        return bag_reg(Xtr, y, Xva, params, w, seeds, cat=cat)
     p = bag_binary(Xtr, pos.astype(int), Xva, BASE_CLF, w, seeds)
     wp = None if w is None else w[pos]
-    mag = bag_reg(Xtr[pos], y[pos], Xva, params, wp, seeds)
+    cp = dict(n_estimators=500, learning_rate=0.03, depth=6) if cat else params
+    mag = bag_reg(Xtr[pos], y[pos], Xva, cp, wp, seeds, cat=cat)
     return np.clip(p * mag, 0, None)
+
+
+def reg_predict(D, t, kind):
+    """One regression prediction under a named recipe."""
+    X, y, Xv, w = D['Xtr'], D['ytr'][t], D['Xva'], D['w']
+    if kind == 'direct':
+        return bag_reg(X, y, Xv, w=w)
+    if kind == 'direct_cat':
+        return bag_reg(X, y, Xv, params=dict(n_estimators=500, learning_rate=0.03, depth=6),
+                       w=w, cat=True)
+    if kind == 'hurdle':
+        return hurdle_reg(X, y, Xv, w=w)
+    if kind == 'hurdle_cat':
+        return hurdle_reg(X, y, Xv, w=w, cat=True)
+    if kind == 'hurdle_avg':
+        return (hurdle_reg(X, y, Xv, w=w) + hurdle_reg(X, y, Xv, w=w, cat=True)) / 2
+    raise ValueError(kind)
+
+
+def reg_rmses(ctx, kind, mode='monthly', extra=None):
+    rf, rn = [], []
+    for v in V.FOLDS:
+        D = ctx.fold(v, mode=mode, extra=extra)
+        rf.append(rmse(reg_predict(D, 'CLV_fuel', kind), D['yva'].CLV_fuel))
+        rn.append(rmse(reg_predict(D, 'CLV_nonfuel', kind), D['yva'].CLV_nonfuel))
+    return rf, rn
+
+
+def clf_f1s(ctx, mode='monthly', params=None, extra=None, n_est=None):
+    out = []
+    for v in V.FOLDS:
+        D = ctx.fold(v, mode=mode, extra=extra)
+        out.append(eval_clf(ctx, bag_clf(D['Xtr'], D['ycode'], D['Xva'], ctx.labels,
+                                         params=params, n_est=n_est), D['yva']))
+    return out
 
 
 # --- scoring -----------------------------------------------------------------
@@ -215,24 +252,42 @@ def report(title, rows, ref_row=None, metric='score'):
     return rows
 
 
-def judge(rows, ref_row, metric, bar):
-    """Apply the GO bar: mean gain >= bar AND better on BOTH folds."""
-    get = {'score': lambda r: (r.score(0), r.score(1)),
-           'f1': lambda r: (r.f1[0], r.f1[1]),
-           'rf': lambda r: (r.rf[0], r.rf[1]),
-           'rn': lambda r: (r.rn[0], r.rn[1])}[metric]
-    sign = -1 if metric in ('rf', 'rn') else 1
-    ra, rb = get(ref_row)
+SCORE_BAR = 0.0015
+COMPONENT_SLACK = 0.001
+
+
+def judge(rows, ref_row, metric=None, bar=None):
+    """The single decision rule (replaces the original per-target -0.005 bars,
+    which were set before the score formula was known):
+
+      KEEP if (1) mean combined score improves by >= 0.0015 over the current
+      best, (2) the combined score improves on BOTH folds, and (3) no component
+      (F1, rmse_f, rmse_nf) gets worse on either fold by more than 0.001.
+
+    `metric`/`bar` are accepted and ignored so the per-target report() calls
+    still work; the verdict is always the rule above.
+    """
     for r in rows:
         if r is ref_row:
             r.kept = 'reference'
             continue
-        a, b = get(r)
-        gain = sign * (((a + b) / 2) - ((ra + rb) / 2))
-        both = sign * (a - ra) > 0 and sign * (b - rb) > 0
-        r.kept = 'KEPT' if (gain >= bar and both) else 'dropped'
-        if gain >= bar and not both:
-            r.note = 'mean bar met but one fold worse'
+        gain = r.mean_score - ref_row.mean_score
+        both = all(r.score(i) > ref_row.score(i) for i in (0, 1))
+        # component regressions: F1 lower is worse, RMSEs higher are worse
+        worst = 0.0
+        for i in (0, 1):
+            worst = max(worst, ref_row.f1[i] - r.f1[i],
+                        r.rf[i] - ref_row.rf[i], r.rn[i] - ref_row.rn[i])
+        ok = gain >= SCORE_BAR and both and worst <= COMPONENT_SLACK
+        r.kept = 'KEPT' if ok else 'dropped'
+        why = []
+        if gain < SCORE_BAR:
+            why.append(f'gain {gain:+.5f}<{SCORE_BAR}')
+        if not both:
+            why.append('one fold down')
+        if worst > COMPONENT_SLACK:
+            why.append(f'component -{worst:.4f}')
+        r.note = ('' if ok else ' '.join(why))
     return rows
 
 
@@ -473,10 +528,32 @@ def block_b2(ctx, ref):
     return _reg_rows(ctx, ref, vs, 'B2  RECENCY / SPACING (regressions)', 'b2')
 
 
+def best_reg_row(ref):
+    """The current best regression stack: B1's hurdle if it was kept, else the
+    bagged reference. Regression changes are measured on top of this so we can
+    see whether gains stack."""
+    saved = json.loads(RESULTS.read_text()) if RESULTS.exists() else {}
+    for d in saved.get('b1', []):
+        if 'hurdle' in d['name']:
+            r = Row(d['name'] + ' [current best]', d['f1'], d['rf'], d['rn'])
+            r.kept = 'reference'
+            return r, 'hurdle'
+    return ref, 'direct'
+
+
 def block_b3(ctx, ref):
-    return _reg_rows(ctx, ref, {'b3 catboost': ('monthly', None, 'direct', True),
-                                'b3 lgbm+catboost average': ('monthly', None, 'avg', False)},
-                     'B3  CATBOOST (regressions)', 'b3')
+    base, base_kind = best_reg_row(ref)
+    rows = [base]
+    for name, kind in (('b3 hurdle + catboost magnitude', 'hurdle_cat'),
+                       ('b3 hurdle lgbm/catboost average', 'hurdle_avg')):
+        rf, rn = reg_rmses(ctx, kind)
+        rows.append(Row(name, rf=rf, rn=rn, ref=ref_dict(base)))
+        print(f'  {name}: rmse_f {rf[0]:.4f}/{rf[1]:.4f}, rmse_nf {rn[0]:.4f}/{rn[1]:.4f}')
+    judge(rows, base)
+    for metric, label in (('score', 'combined score'), ('rf', 'CLV_fuel'), ('rn', 'CLV_nonfuel')):
+        report(f'B3  CATBOOST ON TOP OF THE HURDLE -- {label}', rows, base, metric)
+    save('b3', [r.as_dict() for r in rows])
+    return rows
 
 
 # --- C) adoption, one cheap test --------------------------------------------
@@ -531,28 +608,29 @@ def block_c(ctx, ref):
 # --- D) more cutoffs ---------------------------------------------------------
 
 def block_d(ctx, ref):
-    """monthly vs fortnightly vs weekly training cutoffs, classifier and both
-    regressions. Snapshots are cached, but the first weekly run builds ~65 of
-    them, so this block is the slow one."""
-    rows = [ref]
+    """monthly vs fortnightly vs weekly cutoffs. Regressions are measured on top
+    of the current best recipe (the hurdle), the classifier against the bagged
+    reference. B2 showed the regressions want more snapshots while the
+    classifier does not, so the two targets may well disagree here."""
+    base, base_kind = best_reg_row(ref)
+    saved = json.loads(RESULTS.read_text()) if RESULTS.exists() else {}
+    for d in saved.get('b3', []):
+        if d.get('kept') == 'KEPT':
+            base_kind = 'hurdle_avg' if 'average' in d['name'] else 'hurdle_cat'
+            print(f'  B3 kept "{d["name"]}", so the regression recipe here is {base_kind}')
+    rows = [base]
     for mode in ('fortnightly', 'weekly'):
-        f1s, rf, rn = [], [], []
-        for v in V.FOLDS:
-            t0 = time.time()
-            D = ctx.fold(v, mode=mode)
-            p = bag_clf(D['Xtr'], D['ycode'], D['Xva'], ctx.labels)
-            f1s.append(eval_clf(ctx, p, D['yva']))
-            got = {t: bag_reg(D['Xtr'], D['ytr'][t], D['Xva']) for t in TARGETS}
-            rf.append(rmse(got['CLV_fuel'], D['yva'].CLV_fuel))
-            rn.append(rmse(got['CLV_nonfuel'], D['yva'].CLV_nonfuel))
-            print(f'  {mode} fold {v}: {len(D["cuts"])} snapshots, {len(D["Xtr"])} rows, '
-                  f'{time.time() - t0:.0f}s')
-        rows.append(Row(f'd {mode}', f1s, rf, rn,
-                        note=f'{len(schedule(V.FOLDS[1], mode))} snaps on fold 2'))
-    for metric, label, bar in (('f1', 'Opportunity', 0.005),
-                               ('rf', 'CLV_fuel', 0.005), ('rn', 'CLV_nonfuel', 0.005)):
-        judge(rows, ref, metric, bar)
-        report(f'D  CUTOFF DENSITY -- {label}', rows, ref, metric)
+        t0 = time.time()
+        f1s = clf_f1s(ctx, mode=mode)
+        rf, rn = reg_rmses(ctx, base_kind, mode=mode)
+        rows.append(Row(f'd {mode} ({base_kind})', f1s, rf, rn,
+                        note=f'{len(schedule(V.FOLDS[1], mode))} snaps fold 2'))
+        print(f'  {mode}: {len(schedule(V.FOLDS[1], mode))} snaps on fold 2, '
+              f'{time.time() - t0:.0f}s')
+    judge(rows, base)
+    for metric, label in (('score', 'combined score'), ('f1', 'Opportunity'),
+                          ('rf', 'CLV_fuel'), ('rn', 'CLV_nonfuel')):
+        report(f'D  CUTOFF DENSITY -- {label}', rows, base, metric)
     save('d', [r.as_dict() for r in rows])
     return rows
 

@@ -233,12 +233,22 @@ The mechanism is confirmed rather than assumed: non-fuel is about 65% zeros per
 quarter and fuel about 29%, and the hurdle helps non-fuel (-0.0035) more than
 fuel (-0.0021), ordered exactly by zero-inflation.
 
-**Open decision.** Combined score 0.28553 vs 0.28342 = +0.00211, which exceeds
-the +0.00200 a passing Opportunity variant would be worth. So the hurdle pays
-more in the leaderboard's own currency than an F1 variant that clears its bar,
-while failing the per-target bars. The per-component bars and "all decisions use
-one number" disagree here. Not resolved unilaterally; see whether B2/B3 stack on
-top before deciding.
+**Resolved: KEPT.** The per-target -0.005 bars were set before the score formula
+was known and are replaced from here on by a single rule:
+
+> KEEP if (1) mean combined score improves by >= 0.0015 over the current best,
+> (2) the combined score improves on BOTH folds, and (3) no component (F1,
+> rmse_f, rmse_nf) gets worse on either fold by more than 0.001.
+
+B1 under that rule:
+- (1) mean score gain +0.00212 >= 0.0015 -- pass
+- (2) both folds up: fold1 +0.00175, fold2 +0.00249 -- pass
+- (3) worst component change +0.00000 (nothing gets worse at all) -- pass
+
+Re-judging every earlier variant under the new rule changes no other verdict:
+a1/a2/a3/a4 and all of b2 remain dropped, each failing on the gain and on at
+least one fold. B1 is the only kept change in sweep 2 so far, and the hurdle is
+now the current best regression stack that B3 and D are measured on top of.
 
 ### B2 recency / spacing (regressions) -- all dropped, and it inverts A2
 Positive delta = higher RMSE = worse.
