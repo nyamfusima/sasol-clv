@@ -124,6 +124,32 @@ The public gap to 1st is 0.02117, and it is 85% label: F1 contributes +0.01800,
 RMSE fuel +0.00243, RMSE nonfuel +0.00074. Regression work is cheap and does
 count, but F1 is where the race is decided.
 
+## Sweep 2 (5 Oct) -- 5-seed bagged, decided on the combined score
+
+New reference: baseline features, monthly snapshots, seeds 42-46 averaged.
+| | F1 | rmse fuel | rmse nonfuel | Score |
+| --- | --- | --- | --- | --- |
+| single-seed baseline | 0.4998 | 0.6025 | 0.7453 | 0.28164 |
+| **5-seed bagged reference** | 0.5006 | 0.6005 | 0.7436 | **0.28342** |
+
+Bagging is worth +0.00178, and nearly all of it is regression variance reduction
+(rmse -0.0020 / -0.0018) rather than F1 (+0.0008). GO bars are measured against
+the bagged reference, as they should be.
+
+### A1 recency weighting (classifier) -- all dropped
+| variant | fold 2025-06 | fold 2025-09 | mean F1 | delta | kept |
+| --- | --- | --- | --- | --- | --- |
+| reference | 0.4953 | 0.5058 | 0.5006 | - | reference |
+| half-life 3mo | 0.4916 | 0.5028 | 0.4972 | -0.0034 | dropped |
+| half-life 6mo | 0.4955 | 0.5044 | 0.5000 | -0.0006 | dropped |
+| half-life 12mo | 0.4971 | 0.5042 | 0.5007 | +0.0001 | dropped |
+
+Monotone in the half-life and converging to the reference from below: the longer
+the half-life, the better, with the limit (uniform weights) being the reference.
+There is no distribution shift here that down-weighting old snapshots corrects
+for -- you only lose effective sample size. Do not revisit unless the label mix
+starts moving faster than it has.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
