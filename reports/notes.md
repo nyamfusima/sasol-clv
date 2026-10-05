@@ -300,6 +300,39 @@ the LightGBM/CatBoost average (+0.00050), so CatBoost's magnitude model is
 genuinely better on positive rows rather than merely decorrelated -- averaging
 dilutes it, which is the opposite of the usual rationale for averaging.
 
+### C adoption binary + oracle relabel -- DROP THE IDEA (definitive)
+| fold | AUC | base F1 | best oracle F1 | gain | optimal k |
+| --- | --- | --- | --- | --- | --- |
+| 2025-06 | 0.7396 | 0.4953 | 0.4960 | +0.0008 | 50 |
+| 2025-09 | 0.7500 | 0.5058 | 0.5070 | +0.0012 | 75 |
+
+Both folds under the 0.003 kill-switch, so the idea is dropped as agreed.
+
+This is conclusive rather than merely negative. **AUC 0.745 means the ranking
+works** -- a binary "will adopt something" model genuinely discriminates, so this
+is not a modelling failure. But the ORACLE relabel, which picks k with full
+sight of the validation labels and therefore cannot be beaten by any realisable
+method, gains only +0.001 F1 (+0.0004 score). The oracle also chose to relabel
+just 50-75 of about 5,000 customers, i.e. it found that relabelling more costs
+more than it gains.
+
+Mechanism: adoption is ~7% of support split across 11 classes, so a correct
+prediction must be right twice (that they adopt at all, and which of 11), while
+every relabel immediately costs precision on Stable and Inactivity at ~27%
+support each. Weighted F1 cannot pay for adoption recall at these base rates.
+
+**Do not spend more time on the adoption classes.** Any future attempt needs a
+fundamentally different signal, not a better classifier or threshold.
+
+### Where the F1 gap actually is -- revised
+Sweep 1 guessed adoption was the largest unclaimed block (~7% of weight at F1
+0.000). C shows that block is unreachable from these features. Reconstructing
+1st place's 0.557 without adoption requires the big three classes to carry it:
+Fuel growth 0.454 -> 0.60 is worth about +0.040 weighted and Stable 0.574 -> 0.65
+about +0.020. So the race is **Fuel growth vs Stable discrimination**, which is
+also exactly where the confusion matrix has always been worst (432 of 1435 true
+Fuel growth predicted Stable, 362 of 1404 true Stable predicted Fuel growth).
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
