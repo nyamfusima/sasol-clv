@@ -69,7 +69,14 @@ def load(cutoffs, train_path='data/train.csv', cfg=None, blocks=('base',),
     if p.exists() and not refresh:
         t = pd.read_parquet(p)
         for c, g in t.groupby('_cutoff', observed=True):
-            cache[str(c)] = g.drop(columns=['_cutoff'])
+            g = g.drop(columns=['_cutoff'])
+            # Normalise to ID-as-index so cached and freshly built snapshots have
+            # the same shape. Without this, adding new cutoffs to an existing
+            # cache concatenates both forms and the rewrite below fails on
+            # "cannot insert ID, already exists".
+            if 'ID' in g.columns:
+                g = g.set_index('ID')
+            cache[str(c)] = g
     missing = [c for c in cutoffs if c not in cache]
     if missing:
         if d is None:
