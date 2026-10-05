@@ -210,10 +210,15 @@ class Row:
     always computable. Components a variant does not touch are filled from the
     reference, which makes `score` directly comparable across blocks."""
 
-    def __init__(self, name, f1=None, rf=None, rn=None, ref=None, note=''):
+    def __init__(self, name, f1=None, rf=None, rn=None, ref=None, note='', touches=None):
         g = lambda v, k: v if v is not None else [ref[k][i] for i in (0, 1)]
         self.name, self.note = name, note
         self.f1, self.rf, self.rn = g(f1, 'f1'), g(rf, 'rf'), g(rn, 'rn')
+        # which components this change actually alters; condition (3) guards
+        # only these, so a regression-only change cannot be rejected for an F1
+        # effect it does not have. Defaults to whatever was passed explicitly.
+        self.touches = tuple(touches) if touches else tuple(
+            k for k, v in (('f1', f1), ('rf', rf), ('rn', rn)) if v is not None) or ('f1', 'rf', 'rn')
         self.kept = ''
 
     def score(self, i):
@@ -226,7 +231,7 @@ class Row:
     def as_dict(self):
         return dict(name=self.name, f1=self.f1, rf=self.rf, rn=self.rn,
                     score=[self.score(0), self.score(1)], mean_score=self.mean_score,
-                    kept=self.kept, note=self.note)
+                    kept=self.kept, note=self.note, touches=list(self.touches))
 
 
 def report(title, rows, ref_row=None, metric='score'):
@@ -262,10 +267,14 @@ def judge(rows, ref_row, metric=None, bar=None):
 
       KEEP if (1) mean combined score improves by >= 0.0015 over the current
       best, (2) the combined score improves on BOTH folds, and (3) no component
-      (F1, rmse_f, rmse_nf) gets worse on either fold by more than 0.001.
+      the change TOUCHES gets worse on either fold by more than 0.001.
 
-    `metric`/`bar` are accepted and ignored so the per-target report() calls
-    still work; the verdict is always the rule above.
+    Condition (3) is scoped to `row.touches`, so a regression-only change is
+    never rejected for an F1 effect it does not have. For a single-component
+    change the 0.0015 score bar is equivalent to these component gains:
+      F1 >= +0.00375 | rmse_fuel <= -0.00370 | rmse_nonfuel <= -0.00408
+
+    `metric`/`bar` are accepted and ignored so per-target report() calls work.
     """
     for r in rows:
         if r is ref_row:
@@ -273,11 +282,13 @@ def judge(rows, ref_row, metric=None, bar=None):
             continue
         gain = r.mean_score - ref_row.mean_score
         both = all(r.score(i) > ref_row.score(i) for i in (0, 1))
-        # component regressions: F1 lower is worse, RMSEs higher are worse
-        worst = 0.0
+        worst, worst_name = 0.0, ''
         for i in (0, 1):
-            worst = max(worst, ref_row.f1[i] - r.f1[i],
-                        r.rf[i] - ref_row.rf[i], r.rn[i] - ref_row.rn[i])
+            for k, delta in (('f1', ref_row.f1[i] - r.f1[i]),
+                             ('rf', r.rf[i] - ref_row.rf[i]),
+                             ('rn', r.rn[i] - ref_row.rn[i])):
+                if k in r.touches and delta > worst:
+                    worst, worst_name = delta, k
         ok = gain >= SCORE_BAR and both and worst <= COMPONENT_SLACK
         r.kept = 'KEPT' if ok else 'dropped'
         why = []
@@ -286,9 +297,16 @@ def judge(rows, ref_row, metric=None, bar=None):
         if not both:
             why.append('one fold down')
         if worst > COMPONENT_SLACK:
-            why.append(f'component -{worst:.4f}')
+            why.append(f'{worst_name} -{worst:.4f}')
         r.note = ('' if ok else ' '.join(why))
     return rows
+
+
+def component_bar(component):
+    """The component change equivalent to the 0.0015 combined-score bar."""
+    return {'f1': SCORE_BAR / V.W_F1,
+            'rf': -SCORE_BAR * V.FUEL_NORM / V.W_FUEL,
+            'rn': -SCORE_BAR * V.NONFUEL_NORM / V.W_NONFUEL}[component]
 
 
 # --- block context -----------------------------------------------------------
@@ -608,31 +626,52 @@ def block_c(ctx, ref):
 # --- D) more cutoffs ---------------------------------------------------------
 
 def block_d(ctx, ref):
-    """monthly vs fortnightly vs weekly cutoffs. Regressions are measured on top
-    of the current best recipe (the hurdle), the classifier against the bagged
-    reference. B2 showed the regressions want more snapshots while the
-    classifier does not, so the two targets may well disagree here."""
+    """Cutoff density, decided PER TARGET. B2 showed the regressions want more
+    snapshots while the classifier is indifferent, so the three targets are
+    allowed to choose different spacings and each is judged only on its own
+    component. monthly is the incumbent for all three: the bagged reference for
+    the classifier, the kept hurdle for the regressions.
+    """
     base, base_kind = best_reg_row(ref)
     saved = json.loads(RESULTS.read_text()) if RESULTS.exists() else {}
     for d in saved.get('b3', []):
         if d.get('kept') == 'KEPT':
             base_kind = 'hurdle_avg' if 'average' in d['name'] else 'hurdle_cat'
-            print(f'  B3 kept "{d["name"]}", so the regression recipe here is {base_kind}')
-    rows = [base]
-    for mode in ('fortnightly', 'weekly'):
+            print(f'  B3 kept "{d["name"]}" -> regression recipe here is {base_kind}')
+    modes = ('fortnightly', 'weekly')
+    f1_by, rf_by, rn_by = {}, {}, {}
+    for mode in modes:
         t0 = time.time()
-        f1s = clf_f1s(ctx, mode=mode)
-        rf, rn = reg_rmses(ctx, base_kind, mode=mode)
-        rows.append(Row(f'd {mode} ({base_kind})', f1s, rf, rn,
-                        note=f'{len(schedule(V.FOLDS[1], mode))} snaps fold 2'))
+        f1_by[mode] = clf_f1s(ctx, mode=mode)
+        rf_by[mode], rn_by[mode] = reg_rmses(ctx, base_kind, mode=mode)
         print(f'  {mode}: {len(schedule(V.FOLDS[1], mode))} snaps on fold 2, '
-              f'{time.time() - t0:.0f}s')
-    judge(rows, base)
-    for metric, label in (('score', 'combined score'), ('f1', 'Opportunity'),
-                          ('rf', 'CLV_fuel'), ('rn', 'CLV_nonfuel')):
-        report(f'D  CUTOFF DENSITY -- {label}', rows, base, metric)
-    save('d', [r.as_dict() for r in rows])
-    return rows
+              f'{time.time() - t0:.0f}s', flush=True)
+
+    out, winners = {}, {}
+    specs = [('f1', 'Opportunity (vs bagged reference classifier)', ref,
+              lambda m: dict(f1=f1_by[m])),
+             ('rf', 'CLV_fuel (vs kept hurdle)', base, lambda m: dict(rf=rf_by[m])),
+             ('rn', 'CLV_nonfuel (vs kept hurdle)', base, lambda m: dict(rn=rn_by[m]))]
+    for comp, label, incumbent, pick in specs:
+        inc = Row('monthly [incumbent]', f1=incumbent.f1, rf=incumbent.rf,
+                  rn=incumbent.rn, touches=(comp,))
+        inc.kept = 'reference'
+        rows = [inc]
+        for mode in modes:
+            rows.append(Row(f'd {mode}', ref=ref_dict(incumbent), touches=(comp,),
+                            note=f'{len(schedule(V.FOLDS[1], mode))} snaps', **pick(mode)))
+        judge(rows, inc)
+        report(f'D  CUTOFF DENSITY -- {label}', rows, inc, comp)
+        print(f'  0.0015 score bar on this component = {component_bar(comp):+.5f}')
+        kept = [r for r in rows[1:] if r.kept == 'KEPT']
+        best = max(kept, key=lambda r: r.mean_score) if kept else inc
+        winners[comp] = 'monthly' if best is inc else best.name.split()[1]
+        print(f'  -> best spacing for this target: {winners[comp]}')
+        out[comp] = [r.as_dict() for r in rows]
+    print('')
+    print(f'  per-target spacing chosen: {winners}')
+    save('d', dict(per_target=out, winners=winners, reg_kind=base_kind))
+    return out
 
 
 # --- E) rule-component classifiers ------------------------------------------
