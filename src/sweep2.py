@@ -673,3 +673,144 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# --- F) new information ------------------------------------------------------
+
+F_CACHE = Path('preds/fblocks.parquet')
+
+
+def f_snapshots(ctx, groups, cutoffs):
+    """Extra F columns per cutoff, cached. Site rates are built forward in time:
+    the table used at cutoff c aggregates outcomes only from snapshots whose
+    outcome window ends on or before c."""
+    import features2 as F2
+    tag = '_'.join(g for g in F2.GROUPS if g in groups)
+    key = f'{tag}'
+    if F_CACHE.exists():
+        t = pd.read_parquet(F_CACHE)
+        have = t[t._key == key] if '_key' in t.columns else t.iloc[:0]
+        if len(have):
+            out = {}
+            for c, g in have.groupby('_cutoff', observed=True):
+                out[str(c)] = g.drop(columns=['_cutoff', '_key']).set_index('ID')
+            if all(c in out for c in cutoffs):
+                return {c: out[c] for c in cutoffs}
+    d, dall = F2.load_rich(ctx.train, ctx.cfg)
+    mono = ctx.monthly
+    home = {c: F2.home_site(d[d._time < pd.Timestamp(c)], ctx.snaps[c][0].index) for c in mono}
+    labs = {c: ctx.snaps[c][1] for c in mono}
+    out = {}
+    for c in cutoffs:
+        earlier = [k for k in mono
+                   if pd.Timestamp(k) + pd.DateOffset(months=3) <= pd.Timestamp(c)]
+        tbl = F2.site_rate_table(home, labs, earlier) if 'f2' in groups else None
+        out[c] = F2.build(d, dall, c, ctx.snaps[c][0].index, groups, tbl)
+        print(f'  F[{tag}] {c}: {out[c].shape[1]} cols'
+              + (f', site table from {len(earlier)} earlier snapshots' if 'f2' in groups else ''),
+              flush=True)
+    prev = pd.read_parquet(F_CACHE) if F_CACHE.exists() else None
+    new = pd.concat([out[c].assign(_cutoff=c, _key=key) for c in out]).rename_axis('ID').reset_index()
+    F_CACHE.parent.mkdir(exist_ok=True)
+    keep = pd.concat([prev[prev._key != key], new]) if prev is not None else new
+    keep.to_parquet(F_CACHE, index=False)
+    return out
+
+
+def _f_eval(ctx, ref, name, groups, mode='quarterly'):
+    extra = f_snapshots(ctx, groups, sorted(set(
+        schedule(V.FOLDS[0], mode) + schedule(V.FOLDS[1], mode) + list(V.FOLDS))))
+    f1s, rf, rn = [], [], []
+    for v in V.FOLDS:
+        D = ctx.fold(v, mode=mode, extra=extra)
+        p = bag_clf(D['Xtr'], D['ycode'], D['Xva'], ctx.labels)
+        f1s.append(eval_clf(ctx, p, D['yva']))
+        got = {t: bag_reg(D['Xtr'], D['ytr'][t], D['Xva']) for t in TARGETS}
+        rf.append(rmse(got['CLV_fuel'], D['yva'].CLV_fuel))
+        rn.append(rmse(got['CLV_nonfuel'], D['yva'].CLV_nonfuel))
+        print(f'  {name} fold {v}: {D["Xtr"].shape[1]} features, {len(D["Xtr"])} rows')
+    return Row(name, f1s, rf, rn)
+
+
+def block_fref(ctx, ref):
+    """Quarterly reference on all three targets. Block F runs quarterly for
+    speed, so its deltas must be measured against quarterly, not monthly --
+    otherwise the spacing effect contaminates every F result. A2 only checked
+    spacing on the classifier, never the regressions."""
+    f1s, rf, rn = [], [], []
+    for v in V.FOLDS:
+        D = ctx.fold(v, mode='quarterly')
+        f1s.append(eval_clf(ctx, bag_clf(D['Xtr'], D['ycode'], D['Xva'], ctx.labels), D['yva']))
+        got = {t: bag_reg(D['Xtr'], D['ytr'][t], D['Xva']) for t in TARGETS}
+        rf.append(rmse(got['CLV_fuel'], D['yva'].CLV_fuel))
+        rn.append(rmse(got['CLV_nonfuel'], D['yva'].CLV_nonfuel))
+        print(f'  fold {v}: {len(D["cuts"])} quarterly snapshots, {len(D["Xtr"])} rows')
+    q = Row('reference quarterly (block F base)', f1s, rf, rn)
+    q.kept = 'reference'
+    report('F0  QUARTERLY REFERENCE vs MONTHLY', [ref, q])
+    save('fref', [q.as_dict()])
+    return q
+
+
+def block_f(ctx, ref):
+    import features2 as F2
+    saved = json.loads(RESULTS.read_text()) if RESULTS.exists() else {}
+    qref = None
+    if 'fref' in saved:
+        d = saved['fref'][0]
+        qref = Row(d['name'], d['f1'], d['rf'], d['rn']); qref.kept = 'reference'
+    else:
+        qref = block_fref(ctx, ref)
+    rows = [qref]
+    singles = {}
+    for g in F2.GROUPS:
+        r = _f_eval(ctx, qref, f'{g} {FG_NAMES[g]}', (g,))
+        singles[g] = r
+        rows.append(r)
+    # F6: everything that individually improved the combined score
+    good = [g for g in F2.GROUPS if singles[g].mean_score > qref.mean_score]
+    print(f'\n  groups that individually improved the score: {good or "none"}')
+    if good:
+        rows.append(_f_eval(ctx, qref, f'f6 combined ({"+".join(good)})', tuple(good)))
+    for metric, label, bar in (('score', 'combined score', 0.0),
+                               ('f1', 'Opportunity', 0.005),
+                               ('rf', 'CLV_fuel', 0.005), ('rn', 'CLV_nonfuel', 0.005)):
+        judge(rows, qref, metric, bar)
+        report(f'F  NEW INFORMATION -- {label}', rows, qref, metric)
+    save('f', [r.as_dict() for r in rows])
+    return rows
+
+
+FG_NAMES = {'f1': 'customer id', 'f2': 'sites', 'f3': 'fuel type/price',
+            'f4': 'timing', 'f5': 'vouchers/discounts'}
+
+
+def write_probes(ctx):
+    """Three constant-label diagnostic files with the bagged reference's
+    regressions. Written to submissions/ but NOT submitted."""
+    cuts = ctx.monthly
+    D = dict(Xtr=pd.concat([T.select(ctx.snaps[c][0], ('base',), ctx.bc) for c in cuts]),
+             ytr=pd.concat([ctx.snaps[c][1] for c in cuts]))
+    Xte = T.select(ctx.snaps[TEST_CUTOFF][0], ('base',), ctx.bc)
+    preds = {t: bag_reg(D['Xtr'], D['ytr'][t], Xte) for t in TARGETS}
+    test_ids = pd.read_csv('data/test.csv', dtype=str).ID
+    base = pd.DataFrame({'CLV_fuel': preds['CLV_fuel'],
+                         'CLV_nonfuel': preds['CLV_nonfuel']}, index=Xte.index)
+    base = base.reindex(test_ids)
+    assert base.notna().all().all(), 'probe regressions missing test IDs'
+    for fname, lab in (('probe_stable.csv', 'Stable'),
+                       ('probe_inactivity.csv', 'Inactivity'),
+                       ('probe_fuelgrowth.csv', 'Existing-category growth: Fuel')):
+        assert lab in ctx.labels, lab
+        sub = base.copy()
+        sub['Opportunity'] = lab
+        assert len(sub) == 5488 and sub.index.equals(pd.Index(test_ids))
+        Path('submissions').mkdir(exist_ok=True)
+        sub.rename_axis('ID').reset_index().to_csv(f'submissions/{fname}', index=False)
+        print(f'  wrote submissions/{fname}: {len(sub)} rows, all Opportunity="{lab}"')
+    print('  (diagnostic only -- not submitted)')
+
+
+BLOCKS['fref'] = block_fref
+BLOCKS['f'] = block_f
+BLOCKS['probes'] = lambda ctx, ref: write_probes(ctx)
