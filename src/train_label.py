@@ -226,8 +226,16 @@ def stage2(cfg, labels, cats, data, bc, blocks, model, out_tag, detail=False):
               f'({out_f1 - bl_sc[other]:+.4f})')
     keep_prior = all(held_out[v] > bl_sc[v] for v in V.FOLDS)
     wmean = np.mean([weights[v] for v in V.FOLDS], axis=0)
+    # The only honest estimate of the prior adjustment is the cross-fold one:
+    # each fold scored with weights fitted on the OTHER fold. Averaging the two
+    # vectors and re-scoring both folds leaks each fold's weights into its own
+    # score, so that number is reported separately and never used for GO/NO-GO.
+    honest = {v: held_out[v] for v in V.FOLDS}
+    honest_mean = float(np.mean(list(honest.values())))
     print(f'  -> prior adjustment {"KEPT" if keep_prior else "DROPPED"} '
           f'(needs a gain on both held-out folds)')
+    print(f'  HELD-OUT mean F1 (weights from the other fold): {honest_mean:.4f} '
+          f'({honest_mean - np.mean(list(bl_sc.values())):+.4f} vs no adjustment) <- use this')
     if keep_prior:
         final = {v: blended[v] * wmean for v in V.FOLDS}
         print('  averaged weights (only classes moved off 1.0):')
@@ -241,7 +249,13 @@ def stage2(cfg, labels, cats, data, bc, blocks, model, out_tag, detail=False):
     print('\n--- final label model ---')
     for v in V.FOLDS:
         print(f'  fold {v}: {fin_sc[v]:.4f}')
-    print(f'  mean: {mean:.4f}')
+    if keep_prior:
+        print(f'  mean: {mean:.4f}  <- OPTIMISTIC: averaged weights include each '
+              f'fold\'s own fit.\n        Honest held-out mean is {honest_mean:.4f}; '
+              f'GO/NO-GO uses that.')
+        mean = honest_mean
+    else:
+        print(f'  mean: {mean:.4f}')
     if detail:
         V.report('best variant', {v: (truth[v], argmax_labels(final[v], labels)) for v in V.FOLDS},
                  labels, show_detail=True)
@@ -344,8 +358,10 @@ def main():
             tr=tr,
             Xtr=pd.concat([snaps[c][0] for c in tr]),
             ytr=pd.concat([snaps[c][1] for c in tr]),
+            # Ttr only: the future category spend at the VALIDATION cutoff is
+            # unobservable at predict time and must never be loaded here.
             Ttr=pd.concat([tgts[c] for c in tr]),
-            Xva=snaps[v][0], yva=snaps[v][1], Tva=tgts[v])
+            Xva=snaps[v][0], yva=snaps[v][1])
 
     if a.mode == 'stage2':
         blocks = tuple(x.strip() for x in a.blocks.split(',') if x.strip())
