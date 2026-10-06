@@ -5,6 +5,19 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | Date | File | What | Val RMSE fuel | Val RMSE non-fuel | Val F1 | Public | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-05 | submission_baseline_v1.csv | LGBM, 16 monthly snapshots, seed 42 | 0.6052 | 0.7489 | 0.5047 | ? | pipeline test |
+| 2026-10-06 | submission_v2.csv | 5-seed bag (42-46), monthly, hurdle regressions, reference classifier | 0.5994 | 0.7450 | 0.5058 | ? | not submitted; combined score 0.28553 |
+
+Combined score = 0.4*F1 + 0.3*(1 - RMSE_fuel/0.74) + 0.3*(1 - RMSE_nonfuel/0.816).
+RMSE/F1 columns above are fold 2 (1 Sep 2025), matching this log's convention.
+
+| Stack | Mean score | Fold 2025-06 | Fold 2025-09 |
+| --- | --- | --- | --- |
+| single-seed baseline | 0.28164 | 0.28208 | 0.28120 |
+| 5-seed bagged reference | 0.28342 | 0.28387 | 0.28296 |
+| **submission_v2** (bagged + hurdle) | **0.28553** | 0.28561 | 0.28545 |
+
+submission_v2 validation: 5,488 rows, IDs match data/test.csv, 11 distinct
+labels all in label_config.json, both CLV columns >= 0 (min 0.0256).
 
 No submission was produced on 5 Oct: the label v2 sweep (variants a-f) peaked at
 a held-out mean F1 of 0.5011 vs the baseline's 0.4998, which fails the +0.010 bar,
