@@ -1,7 +1,8 @@
 """Sasol CLV baseline: rolling-cutoff snapshots -> customer features -> LightGBM.
 Run from the repo root (data files go in data/):
     python src/baseline.py
-Validates on the 2025-09-01 snapshot, then retrains on everything and writes submission.csv.
+Validates on the 2025-09-01 snapshot, then retrains on everything and writes
+submissions/submission_baseline_v1.csv (its own named, logged output).
 
 Features live in features.py and snapshot building/caching in snapshots.py; this
 file is the reference result every variant is measured against, so its numbers
@@ -35,7 +36,7 @@ def fit_predict(Xtr, ytr, Xte, labels):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--train', default='data/train.csv'); ap.add_argument('--test', default='data/test.csv')
-    ap.add_argument('--config', default='src/label_config.json'); ap.add_argument('--out', default='submissions/submission.csv')
+    ap.add_argument('--config', default='src/label_config.json'); ap.add_argument('--out', default='submissions/submission_baseline_v1.csv')
     ap.add_argument('--refresh', action='store_true', help='rebuild the snapshot cache')
     a = ap.parse_args()
     cfg = json.load(open(a.config)); labels = cfg['opportunity_labels']

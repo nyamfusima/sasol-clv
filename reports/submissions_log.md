@@ -19,6 +19,12 @@ RMSE/F1 columns above are fold 2 (1 Sep 2025), matching this log's convention.
 submission_v2 validation: 5,488 rows, IDs match data/test.csv, 11 distinct
 labels all in label_config.json, both CLV columns >= 0 (min 0.0256).
 
+Every file in `submissions/` is named after the run that produced it and has a
+row in this table. An unnamed `submission.csv` left over from a baseline run was
+deleted on 6 Oct (it was byte-identical to `submission_baseline_v1.csv`), and
+`baseline.py` now defaults its `--out` to that named file so the leftover cannot
+reappear.
+
 No submission was produced on 5 Oct: the label v2 sweep (variants a-f) peaked at
 a held-out mean F1 of 0.5011 vs the baseline's 0.4998, which fails the +0.010 bar,
 so `submission_baseline_v1.csv` remains the live entry. Full table in `notes.md`.

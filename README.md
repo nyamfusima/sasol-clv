@@ -16,7 +16,11 @@ Copy `train.csv`, `test.csv` and `SampleSubmission.csv` into `data/`.
 ```powershell
 python src/baseline.py
 ```
-Prints validation scores (1 Sep 2025 snapshot) and writes `submissions/submission.csv`.
+Prints validation scores (1 Sep 2025 snapshot) and writes
+`submissions/submission_baseline_v1.csv`.
+
+Every file in `submissions/` is named after the run that made it and has a row in
+`reports/submissions_log.md`; nothing writes an unnamed `submission.csv`.
 
 ## Layout
 | Path | What |
