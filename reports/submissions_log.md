@@ -7,6 +7,10 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | 2026-10-05 | submission_baseline_v1.csv | LGBM, 16 monthly snapshots, seed 42 | 0.6052 | 0.7489 | 0.5047 | ? | pipeline test |
 | 2026-10-06 | submission_v2.csv | 5-seed bag (42-46), monthly, hurdle regressions, reference classifier | 0.5994 | 0.7450 | 0.5058 | ? | not submitted; combined score 0.28553 |
 
+| 2026-10-06 | probe_stable.csv | all rows "Stable", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |
+| 2026-10-06 | probe_inactivity.csv | all rows "Inactivity", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |
+| 2026-10-06 | probe_fuelgrowth.csv | all rows "Existing-category growth: Fuel", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |
+
 Combined score = 0.4*F1 + 0.3*(1 - RMSE_fuel/0.74) + 0.3*(1 - RMSE_nonfuel/0.816).
 RMSE/F1 columns above are fold 2 (1 Sep 2025), matching this log's convention.
 

@@ -411,6 +411,80 @@ weighting, data density, model capacity, library choice, class priors,
 two-stage structure, rule derivation, rule-event stacking and adoption
 relabelling. The classifier ceiling on these features is real.
 
+## Block F -- new information (6 Oct), quarterly spacing, all groups dropped
+
+Quarterly reference (block F base) 0.28108 vs the monthly reference 0.28342:
+quarterly costs 0.00234 score, almost all of it on fold 1 (10 monthly snapshots
+drop to 4, against fold 2's 13 to 5). Building a separate quarterly reference was
+necessary -- measured against monthly, every F group would have looked ~0.0023
+worse than it is and all six would have been dropped spuriously.
+
+| group | fold 1 score | fold 2 score | mean | delta vs ref | kept |
+| --- | --- | --- | --- | --- | --- |
+| reference quarterly | 0.2790 | 0.2831 | 0.28108 | - | reference |
+| f1 customer id | 0.2775 | 0.2834 | 0.28045 | -0.00064 | dropped |
+| f2 sites | 0.2772 | 0.2810 | 0.27909 | -0.00200 | dropped |
+| f3 fuel type/price | 0.2787 | 0.2837 | 0.28123 | +0.00015 | dropped |
+| f4 timing | 0.2796 | 0.2837 | 0.28165 | +0.00057 | dropped |
+| f5 vouchers/discounts | 0.2782 | 0.2821 | 0.28015 | -0.00093 | dropped |
+| f6 combined (f3+f4) | 0.2791 | 0.2826 | 0.28084 | -0.00024 | dropped |
+
+### F1 alone (customer id)
+| metric | fold 2025-06 | fold 2025-09 | mean | delta |
+| --- | --- | --- | --- | --- |
+| weighted F1 | 0.4895 | 0.5069 | 0.4982 | -0.00177 |
+| rmse fuel | 0.6037 | 0.6034 | 0.6035 | +0.00044 |
+| rmse nonfuel | 0.7440 | 0.7473 | 0.7457 | -0.00069 |
+| combined score | 0.2775 | 0.2834 | 0.28045 | -0.00064 |
+
+The ID diagnostic was real but redundant. Inactivity by ID decile spans
+0.147..0.373 and ID correlates with first-seen date at Pearson 0.543, yet adding
+the two columns costs 0.0018 F1. `tenure` and `hist_days` already carry the
+"new customer" part, and deciles 0-6 are left-censored so their ID order holds
+no date information at all -- only deciles 7-9 are genuinely later sign-ups.
+A strong marginal association with the target is not the same as information the
+model does not already have.
+
+### Per-component split -- the interesting part
+| group | delta F1 | delta rmse_fuel | delta rmse_nonfuel |
+| --- | --- | --- | --- |
+| f1 customer id | -0.00177 | +0.00044 | -0.00069 |
+| f2 sites | -0.00460 | +0.00109 | -0.00079 |
+| f3 fuel type/price | -0.00167 | **-0.00068** | **-0.00147** |
+| f4 timing | -0.00123 | **-0.00072** | **-0.00210** |
+| f5 vouchers/discounts | -0.00127 | +0.00051 | +0.00060 |
+| f6 combined (f3+f4) | -0.00335 | -0.00070 | -0.00222 |
+
+**Every group hurts F1, without exception.** f3 and f4 genuinely help both
+regressions, and their positive combined score is a tug-of-war the classifier
+loss wins.
+
+Falsification check: **f6 is worse than f3 or f4 alone** (+0.00015, +0.00057 ->
+-0.00024). Independent signal would roughly add; going negative says the
+classifier dilution compounds faster than the regression gains accumulate.
+
+f2 is the biggest classifier casualty (-0.0046) despite site inactivity rates
+spanning 0.025..0.488 across 382 sites. `home_site` as a 390-level numeric code
+is the likely culprit -- a high-cardinality identifier LightGBM can split
+arbitrarily on, which is exactly how to overfit a flat signal.
+
+### The one remaining lead (not run, needs a decision)
+Your per-target principle extends from spacing to feature sets: a group could be
+given to the regressions only, leaving the classifier on base features. The
+arithmetic on f6's regression effects is
+0.3*0.00070/0.74 + 0.3*0.00222/0.816 = 0.0011, still under the 0.0015 bar, so it
+does not pass even in its best framing. But that is measured at quarterly, which
+penalises the regressions by ~0.0026, so a monthly re-measurement of
+"f3+f4 on the regressions only" is the single untested combination that could
+plausibly cross. Nothing was kept, so no re-measurement was required.
+
+### Probe files (diagnostic, not submitted)
+`probe_stable.csv`, `probe_inactivity.csv`, `probe_fuelgrowth.csv`: every row
+labelled with one constant class, CLV columns from the bagged reference
+regressions (identical across all three files). Each validated at 5,488 rows,
+IDs matching data/test.csv, a single label present and in the config, and both
+CLV columns >= 0.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
