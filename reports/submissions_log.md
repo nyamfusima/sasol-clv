@@ -5,7 +5,7 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | Date | File | What | Val RMSE fuel | Val RMSE non-fuel | Val F1 | Public | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-05 | submission_baseline_v1.csv | LGBM, 16 monthly snapshots, seed 42 | 0.6052 | 0.7489 | 0.5047 | ? | pipeline test |
-| 2026-10-06 | submission_v2.csv | 5-seed bag (42-46), monthly, hurdle regressions, reference classifier | 0.5994 | 0.7450 | 0.5058 | ? | not submitted; combined score 0.28553 |
+| 2026-10-06 | submission_v2.csv | 5-seed bag (42-46), monthly, hurdle regressions, reference classifier | 0.5994 | 0.7450 | 0.5058 | **0.2991** | combined score 0.28553 |
 
 | 2026-10-06 | probe_stable.csv | all rows "Stable", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |
 | 2026-10-06 | probe_inactivity.csv | all rows "Inactivity", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |
@@ -25,6 +25,12 @@ RMSE/F1 columns above are fold 2 (1 Sep 2025), matching this log's convention.
 | single-seed baseline | 0.28164 | 0.28208 | 0.28120 |
 | 5-seed bagged reference | 0.28342 | 0.28387 | 0.28296 |
 | **submission_v2** (bagged + hurdle) | **0.28553** | 0.28561 | 0.28545 |
+
+Public feedback: v2 scored **0.2991**. The single-seed baseline's public score
+works out to 0.29741 from its reported components, so bagging + the hurdle moved
+the public score about +0.0017 against the +0.00389 validation predicted --
+directionally confirmed, roughly 44% of the predicted size. Worth remembering
+when reading any future validation gain of this magnitude.
 
 submission_v2 validation: 5,488 rows, IDs match data/test.csv, 11 distinct
 labels all in label_config.json, both CLV columns >= 0 (min 0.0256).

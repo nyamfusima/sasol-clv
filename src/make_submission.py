@@ -23,9 +23,7 @@ import argparse, json, time
 from pathlib import Path
 import numpy as np, pandas as pd, lightgbm as lgb
 from sklearn.metrics import f1_score
-import features as F
-import label_rules as L
-import snapshots as S
+import snapshots as S   # load_data / build_one / categories; no cache is touched
 
 SEEDS = (42, 43, 44, 45, 46)
 TEST_CUTOFF = '2025-12-01'
