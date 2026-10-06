@@ -7,6 +7,9 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | 2026-10-05 | submission_baseline_v1.csv | LGBM, 16 monthly snapshots, seed 42 | 0.6052 | 0.7489 | 0.5047 | ? | pipeline test |
 | 2026-10-06 | submission_v2.csv | 5-seed bag (42-46), monthly, hurdle regressions, reference classifier | 0.5994 | 0.7450 | 0.5058 | **0.2991** | combined score 0.28553 |
 
+| 2026-10-06 | submission_v2_bag20.csv | 20-seed bag (42-61), monthly, hurdle regressions | 0.5996 | 0.7451 | 0.5045 | ? | score 0.28502; flip rate 1.42% vs 2.91% for 5-seed |
+| 2026-10-06 | submission_v2_prior.csv | bag20 + Fuel-growth prior x1.25 (cross-fold validated) | 0.5996 | 0.7451 | 0.5096 | ? | score 0.28667; best candidate |
+
 | 2026-10-06 | probe_stable.csv | all rows "Stable", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |
 | 2026-10-06 | probe_inactivity.csv | all rows "Inactivity", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |
 | 2026-10-06 | probe_fuelgrowth.csv | all rows "Existing-category growth: Fuel", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |

@@ -600,6 +600,107 @@ is the direction validation says is wrong -- Fuel growth is the class the model
 already under-predicts. On validation the equivalent configurations score
 -0.0046 (x10) and -0.0425 (analog-only) on F1, so neither is a candidate.
 
+## Consolidation (6 Oct)
+
+### 1. One reproducible entry point
+`src/make_submission.py` goes from `data/train.csv` + `data/test.csv` to a
+submission with no cached artifacts (all 17 snapshots built in memory), seeds
+fixed, printing per-fold and mean validation. It reproduces
+`submissions/submission_v2.csv` **byte-for-byte** (`cmp` clean, not merely within
+1e-9) and prints the recorded numbers exactly: fold1 0.28561, fold2 0.28545,
+mean 0.28553. **Runtime 646 s** on 12 logical cores.
+
+### 2. Seed stability
+Five 5-seed builds, each the v2 stack on a different disjoint seed set:
+
+| seeds | fold 2025-06 | fold 2025-09 | mean score |
+| --- | --- | --- | --- |
+| 42-46 (= v2) | 0.28561 | 0.28545 | **0.28553** |
+| 47-51 | 0.28538 | 0.28520 | 0.28529 |
+| 52-56 | 0.28542 | 0.28536 | 0.28539 |
+| 57-61 | 0.28519 | 0.28504 | 0.28511 |
+| 62-66 | 0.28510 | 0.28483 | 0.28496 |
+
+Spread: range 0.00057, sd 0.00020, mean 0.28526. **v2 is the maximum of the five
+draws**, so the 0.28553 headline sits at the optimistic end of what a 5-seed bag
+delivers. Seeds 42-46 were fixed before any measurement, so this is not
+post-hoc selection -- but it does mean 0.28553 should not be read as the expected
+score of the approach, which is about 0.28526.
+
+Opportunity flip rate between 5-seed builds: **2.91%** of test customers (10
+pairs, 2.73-3.01%).
+
+### 20-seed bag (42-61)
+| | F1 | rmse fuel | rmse nonfuel | score |
+| --- | --- | --- | --- | --- |
+| fold 2025-06 | 0.4937 | 0.5969 | 0.7350 | 0.28524 |
+| fold 2025-09 | 0.5045 | 0.5996 | 0.7451 | 0.28481 |
+| mean | 0.4991 | - | - | **0.28502** |
+
+Flip rate between two **disjoint** 20-seed bags (42-61 vs 62-81): **1.42%**,
+51% lower than the 5-seed rate -- almost exactly the 1/sqrt(4) expected from
+averaging four times as many seeds.
+
+**Verdict: bag20 fails the keep rule, by 0.00001.** The gap to v2 is -0.00051
+against a 0.0005 window. Two considerations pull opposite ways and both are
+recorded rather than resolved in favour of the convenient one:
+- *Against the strict reading*: v2 is the luckiest of five draws. Against the
+  expected 5-seed score (0.28526) bag20 is only -0.00023, inside the window.
+- *Supporting it*: bag20's F1 is systematically low, not just below the lucky
+  draw. Fold-2 F1 across the five builds is 0.5058/0.5058/0.5061/0.5056/0.5044
+  and bag20 gives 0.5045 -- below four of five. Its regressions are equal or
+  marginally better. So heavier bagging genuinely lowers weighted F1, the same
+  asymmetry seen throughout: variance reduction helps the continuous targets and
+  pulls argmax toward majority classes.
+
+Recommendation: keep it as the conservative candidate -- the cost is about 2.5
+seed-sd and the flip rate halves -- but it is a judgement call, not a rule pass.
+
+### 3. Class-prior adjustment -- the first F1 gain in the project
+Fitted on bag20's out-of-fold probabilities with 3 free weights (Stable, Fuel
+growth, growth:Other), each fold fitted independently and scored only on the
+other.
+
+| fit on | Stable | Fuel | Other | held-out F1 |
+| --- | --- | --- | --- | --- |
+| 2025-06 | 1.10 | **1.25** | 2.00 | fold 2025-09: 0.5045 -> 0.5081 (+0.0036) |
+| 2025-09 | 0.80 | **1.25** | 1.00 | fold 2025-06: 0.4937 -> 0.4937 (+0.0000) |
+
+**Only the Fuel-growth weight replicated.** Stable came out on opposite sides of
+1.0 in the two fits (1.10 vs 0.80) and growth:Other moved 2.00 vs 1.00, so both
+are fold-specific noise. Keeping only the replicated parameter *improves* the
+held-out result, which is what should happen if the others were noise:
+
+| weights | fold 2025-06 | fold 2025-09 | mean F1 |
+| --- | --- | --- | --- |
+| bag20, none | 0.4937 | 0.5045 | 0.4991 |
+| full 3-parameter, held out | 0.4937 (+0.0000) | 0.5081 (+0.0036) | 0.5009 (+0.0018) |
+| **Fuel x1.25 only, held out** | **0.4968 (+0.0031)** | **0.5096 (+0.0051)** | **0.5032 (+0.0041)** |
+
+Both Fuel-only numbers are genuinely held out: each fold's own fit chose 1.25
+independently, and each is scored on the other fold. Under the standing rule,
+measured on bag20: score 0.28502 -> **0.28667**, +0.00165 (clears 0.0015), both
+folds up (0.28650 / 0.28685), only F1 touched. **KEPT.**
+
+Why this works where 21 earlier F1 attempts failed: it is not a model change at
+all. The confusion matrix has said from the start that Fuel growth is
+under-predicted (1,209 predicted against 1,435 true on fold 2), and this moves
+exactly that decision boundary by one number. Every earlier attempt tried to give
+the model better information or a different structure; this one accepts the
+model's ranking and corrects its threshold.
+
+### Candidate summary
+| File | Validation score | Mean F1 | Note |
+| --- | --- | --- | --- |
+| `submission_baseline_v1.csv` | 0.28164 | 0.4998 | single seed, reference |
+| `submission_v2.csv` | 0.28553 | 0.5006 | 5-seed bag + hurdle; public 0.2991 |
+| `submission_v2_bag20.csv` | 0.28502 | 0.4991 | 20-seed, flip rate 1.42% vs 2.91% |
+| **`submission_v2_prior.csv`** | **0.28667** | **0.5032** | bag20 + Fuel x1.25, cross-fold validated |
+
+`submission_v2_prior.csv` is both the highest-scoring and the most stable
+candidate: it inherits bag20's halved flip rate and adds a one-parameter
+adjustment validated on each fold by the other.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

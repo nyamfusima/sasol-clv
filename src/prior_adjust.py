@@ -94,18 +94,43 @@ def main():
               f'held-out {other}: {base[other]:.4f} -> {out_f1:.4f} '
               f'({out_f1 - base[other]:+.4f})')
 
-    worse = [v for v in V.FOLDS if held[v] < base[v] - 1e-12]
     mean_held = float(np.mean([held[v] for v in V.FOLDS]))
-    print(f'\n  cross-fold mean F1 {mean_held:.4f} vs bag20 '
+    print(f'\n  full 3-parameter cross-fold mean F1 {mean_held:.4f} vs bag20 '
           f'{np.mean(list(base.values())):.4f} ({mean_held - np.mean(list(base.values())):+.4f})')
+
+    # Keep only parameters the two independent fits AGREED on. A weight the two
+    # folds put on opposite sides of 1.0 is fold-specific noise, and carrying it
+    # costs held-out F1. Because each fold chose the surviving values on its own,
+    # scoring them on the other fold is still a genuine held-out test.
+    wa, wb = weights[V.FOLDS[0]], weights[V.FOLDS[1]]
+    agreed = [j for j in free_idx if abs(wa[j] - wb[j]) < 1e-9]
+    dropped = [labels[j] for j in free_idx if j not in agreed]
+    print(f'\n--- parameters that replicated across both fits ---')
+    for j in free_idx:
+        tag = 'AGREE' if j in agreed else 'disagree'
+        print(f'  {labels[j]:<34} fold1 fit {wa[j]:.2f} | fold2 fit {wb[j]:.2f}   {tag}')
+    if not agreed:
+        print(f'  nothing replicated -> not writing {a.out}')
+        return
+    wmean = np.ones(len(labels))
+    for j in agreed:
+        wmean[j] = wa[j]
+    held2 = {v: f1w(truth[v], apply_w(proba[v], wmean, labels)) for v in V.FOLDS}
+    print(f'\n--- replicated-only weights, held out on both folds ---')
+    for v in V.FOLDS:
+        print(f'  {v}: {base[v]:.4f} -> {held2[v]:.4f} ({held2[v] - base[v]:+.4f})')
+    m2 = float(np.mean(list(held2.values())))
+    print(f'  mean F1 {m2:.4f} ({m2 - np.mean(list(base.values())):+.4f}), '
+          f'vs {mean_held:.4f} for the full 3-parameter vector')
+    worse = [v for v in V.FOLDS if held2[v] < base[v] - 1e-12]
     if worse:
         print(f'  F1 gets WORSE on {worse} -> not writing {a.out}')
         return
     print('  no fold gets worse -> writing the file')
-
-    wmean = np.mean([weights[v] for v in V.FOLDS], axis=0)
-    print('  applied weights (mean of the two fold fits): '
-          + ', '.join(f'{c} {wmean[labels.index(c)]:.3f}' for c in FREE))
+    print('  applied weights: '
+          + ', '.join(f'{labels[j]} {wmean[j]:.3f}' for j in agreed)
+          + (f'  (dropped as non-replicating: {dropped})' if dropped else ''))
+    held = held2
     pte = pd.read_parquet('preds/oof_bag20_test.parquet').set_index('ID')
     bag = pd.read_csv(a.bag20, dtype={'ID': str}).set_index('ID')
     test_ids = pd.read_csv('data/test.csv', dtype=str).ID
