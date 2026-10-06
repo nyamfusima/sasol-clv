@@ -1124,6 +1124,91 @@ def rejudge():
 
 BLOCKS['rejudge'] = lambda ctx, ref: rejudge()
 
+# --- F on the regressions only ------------------------------------------------
+
+REG_GROUPS = ('f3', 'f4')
+
+
+def block_freg(ctx, ref):
+    """f3+f4 given to the REGRESSIONS ONLY, at monthly spacing, on top of the
+    kept hurdle. Block F measured these groups on all three models at quarterly
+    spacing: every group hurt F1 while f3/f4 helped both regressions, so the
+    classifier loss ate the gain. Here the classifier keeps base features and is
+    untouched, so touches=('rf','rn') and condition (3) ignores F1 -- and the
+    quarterly penalty on the regressions (~0.0026) is removed."""
+    base, _ = best_reg_row(ref)
+    cuts = sorted(set(ctx.monthly + list(V.FOLDS) + [TEST_CUTOFF]))
+    extra = f_snapshots(ctx, REG_GROUPS, cuts)
+    rf, rn = reg_rmses(ctx, 'hurdle', mode='monthly', extra=extra)
+    r = Row(f'freg {"+".join(REG_GROUPS)} on regressions (monthly)', rf=rf, rn=rn,
+            ref=ref_dict(base), touches=('rf', 'rn'))
+    rows = [base, r]
+    judge(rows, base)
+    for metric, label in (('score', 'combined score'), ('rf', 'CLV_fuel'),
+                          ('rn', 'CLV_nonfuel')):
+        report(f'F-REG  f3+f4 ON THE REGRESSIONS ONLY -- {label}', rows, base, metric)
+    print(f'  component bars: rf {component_bar("rf"):+.5f}, rn {component_bar("rn"):+.5f}')
+    print(f'  verdict: {r.kept} {r.note}')
+    save('freg', [x.as_dict() for x in rows])
+    return rows
+
+
+def build_v3(ctx, out='submissions/submission_v3.csv'):
+    """v2 with the f3+f4 regressors swapped in. Classifier is byte-for-byte the
+    v2 classifier: same features, spacing, seeds."""
+    saved = json.loads(RESULTS.read_text())
+    passed = [d for d in saved.get('freg', []) if d.get('kept') == 'KEPT']
+    assert passed, 'freg did not pass the keep rule; not building v3'
+    Xte = T.select(ctx.snaps[TEST_CUTOFF][0], ('base',), ctx.bc)
+    cuts = schedule(TEST_CUTOFF, 'monthly')
+    ctx.pool(cuts)
+
+    Xtr, ytr, _ = assemble(ctx.snaps, cuts, ('base',), ctx.bc)
+    print(f'  classifier: monthly, {len(cuts)} snapshots, {len(Xtr)} rows (base features)')
+    opp = T.argmax_labels(bag_clf(Xtr, ytr.Opportunity.map(ctx.code).to_numpy(),
+                                  Xte, ctx.labels), ctx.labels)
+
+    extra = f_snapshots(ctx, REG_GROUPS, sorted(set(cuts + [TEST_CUTOFF])))
+    Xr, yr, _ = assemble(ctx.snaps, cuts, ('base',), ctx.bc, extra=extra)
+    Xter = Xte.join(extra[TEST_CUTOFF])
+    print(f'  regressions: monthly, {len(cuts)} snapshots, {Xr.shape[1]} features, hurdle')
+    preds = {t: reg_predict(dict(Xtr=Xr, ytr=yr, Xva=Xter, w=None), t, 'hurdle')
+             for t in TARGETS}
+
+    test_ids = pd.read_csv('data/test.csv', dtype=str).ID
+    sub = pd.DataFrame({'CLV_fuel': preds['CLV_fuel'], 'CLV_nonfuel': preds['CLV_nonfuel'],
+                        'Opportunity': opp}, index=Xte.index).reindex(test_ids)
+    assert len(sub) == 5488, f'expected 5488 rows, got {len(sub)}'
+    assert sub.index.equals(pd.Index(test_ids)), 'IDs do not match data/test.csv'
+    assert sub.notna().all().all(), 'missing predictions'
+    bad = set(sub.Opportunity) - set(ctx.labels)
+    assert not bad, f'labels outside the config: {bad}'
+    assert (sub[['CLV_fuel', 'CLV_nonfuel']] >= 0).all().all(), 'negative CLV'
+    assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
+    Path(out).parent.mkdir(exist_ok=True)
+    sub.rename_axis('ID').reset_index().to_csv(out, index=False)
+    d = passed[0]
+    r = Row('v3', d['f1'], d['rf'], d['rn'])
+    print('')
+    print(f'Wrote {out}: {len(sub)} rows | IDs match | '
+          f'{sub.Opportunity.nunique()} labels all in config | '
+          f'CLV min {sub[["CLV_fuel", "CLV_nonfuel"]].min().min():.4f} (>= 0)')
+    print(f'  v3 validation score {r.mean_score:.5f} '
+          f'(folds {r.score(0):.5f} / {r.score(1):.5f})')
+    print(f'  v2 was 0.28553 | bagged reference 0.28342 | single-seed 0.28164')
+    # the classifier must be unchanged from v2
+    v2 = pd.read_csv('submissions/submission_v2.csv', dtype={'ID': str})
+    same = (v2.set_index('ID').Opportunity.reindex(test_ids).to_numpy()
+            == sub.Opportunity.to_numpy()).mean()
+    print(f'  Opportunity identical to v2: {same:.4%}')
+    save('v3', dict(score=r.as_dict()))
+    return sub
+
+
+BLOCKS['freg'] = block_freg
+BLOCKS['v3'] = lambda ctx, ref: build_v3(ctx)
+
+
 
 if __name__ == '__main__':
     main()

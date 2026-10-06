@@ -468,7 +468,33 @@ spanning 0.025..0.488 across 382 sites. `home_site` as a 390-level numeric code
 is the likely culprit -- a high-cardinality identifier LightGBM can split
 arbitrarily on, which is exactly how to overfit a flat signal.
 
-### The one remaining lead (not run, needs a decision)
+### F-REG: f3+f4 on the regressions only, monthly -- DROPPED, no v3
+Run 6 Oct on top of the kept hurdle, classifier left on base features so
+touches=('rf','rn') and condition (3) ignores F1.
+
+| | fold 2025-06 | fold 2025-09 | mean | delta |
+| --- | --- | --- | --- | --- |
+| hurdle [current best] score | 0.2856 | 0.2855 | 0.28553 | - |
+| freg f3+f4 score | 0.2869 | 0.2850 | 0.28597 | +0.00044 |
+| rmse fuel | 0.5957 | 0.6005 | 0.5981 | -0.00028 |
+| rmse nonfuel | 0.7336 | 0.7448 | 0.7392 | -0.00088 |
+
+Fails all three conditions: gain +0.00044 < 0.0015; fold 2 score down
+(0.2850 vs 0.2855); and rmse_fuel on fold 2 worsens by 0.0011, over the 0.001
+component slack.
+
+**My quarterly extrapolation of +0.0011 was optimistic.** The regression gains
+shrink with more data: rf -0.00070 -> -0.00028 and rn -0.00222 -> -0.00088 going
+from quarterly to monthly. f3/f4 were partly compensating for quarterly's data
+scarcity, and with the full monthly training set the base hurdle is already
+strong enough that the extra columns mostly stop mattering. Removing the
+quarterly penalty did not help because it applied to base and variant alike and
+largely cancelled. Same diminishing-returns shape as B3 (+0.00212 -> +0.00075)
+and D.
+
+**submission_v2 (0.28553) remains the best stack. No v3 was built.**
+
+### The original lead as stated before it was run
 Your per-target principle extends from spacing to feature sets: a group could be
 given to the regressions only, leaving the classifier on base features. The
 arithmetic on f6's regression effects is
