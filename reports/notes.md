@@ -511,6 +511,95 @@ regressions (identical across all three files). Each validated at 5,488 rows,
 IDs matching data/test.csv, a single label present and in the config, and both
 CLV columns >= 0.
 
+## Block G -- seasonal analog weighting (6 Oct), all 7 variants dropped
+
+Analog = the training snapshot exactly 12 months before the cutoff. History
+behind each analog: fold 1 (2024-06-01) 73 days, fold 2 (2024-09-01) 165 days,
+test (2024-12-01) 256 days. Fold 1's analog is also one-sided -- 2024-05-01 is
+outside our cutoff set -- so G3 trains on 2 snapshots for fold 1 against 3 for
+fold 2. The established cutoff set was left unchanged to keep every earlier
+block comparable.
+
+### Opportunity (vs bagged reference 0.5006)
+| variant | fold 2025-06 | fold 2025-09 | mean F1 | delta | kept |
+| --- | --- | --- | --- | --- | --- |
+| incumbent | 0.4953 | 0.5058 | 0.5006 | - | reference |
+| g1 analog x3 | 0.4971 | 0.5034 | 0.5003 | -0.00029 | dropped |
+| g1 analog x10 | 0.4956 | 0.4962 | 0.4959 | -0.00461 | dropped |
+| g1 analog x30 | 0.4926 | 0.4864 | 0.4895 | -0.01109 | dropped |
+| g2 analog+near x3 | 0.4935 | 0.5029 | 0.4982 | -0.00234 | dropped |
+| g2 analog+near x10 | 0.4978 | 0.4977 | 0.4978 | -0.00278 | dropped |
+| g3 analog+near only | 0.4529 | 0.4632 | 0.4580 | -0.04251 | dropped |
+| g4 season-analog features | 0.4960 | 0.5056 | 0.5008 | +0.00023 | dropped |
+
+### CLV_fuel (vs kept hurdle 0.5984) and CLV_nonfuel (vs 0.7401)
+| variant | rmse_fuel | delta | rmse_nonfuel | delta |
+| --- | --- | --- | --- | --- |
+| g1 analog x3 | 0.5982 | -0.00018 | 0.7396 | -0.00050 |
+| g1 analog x10 | 0.5982 | -0.00026 | 0.7402 | +0.00011 |
+| g1 analog x30 | 0.6022 | +0.00377 | 0.7423 | +0.00221 |
+| g2 analog+near x3 | 0.5979 | -0.00048 | 0.7390 | -0.00107 |
+| g2 analog+near x10 | 0.6006 | +0.00214 | 0.7397 | -0.00039 |
+| g3 analog+near only | 0.6428 | +0.04434 | 0.7839 | +0.04378 |
+| g4 season-analog features | 0.5982 | -0.00024 | 0.7401 | +0.00006 |
+
+### The dose-response is the real result
+On the classifier, harm scales monotonically with the analog weight:
+x3 -0.00029, x10 -0.00461, x30 -0.01109. If the analog snapshot carried extra
+seasonal signal, up-weighting it would help at *some* dose. Instead every
+increase makes things worse, in order. That is a clean refutation rather than a
+null: the analog is just another snapshot, and weighting it up only destroys
+effective sample size.
+
+### Which fold to trust -- and it inverts the expected caveat
+The brief warned that fold 1's thin analog would make fold 1 understate the
+idea. The data runs the other way. Classifier deltas by fold:
+
+| variant | fold 1 (73-day analog) | fold 2 (165-day analog) |
+| --- | --- | --- |
+| g1 analog x3 | +0.0018 | -0.0024 |
+| g1 analog x10 | +0.0003 | -0.0096 |
+| g1 analog x30 | -0.0027 | -0.0194 |
+| g2 analog+near x3 | -0.0018 | -0.0029 |
+| g2 analog+near x10 | +0.0025 | -0.0081 |
+
+Fold 1 is noisy and mildly positive; fold 2 is consistently negative and
+monotone in dose. **The better-supported analog is the one that rejects the idea
+more firmly**, so fold 1 overstates rather than understates here. The test
+analog has 256 days behind it, more than fold 2's 165, and the trend across
+73 -> 165 days of analog history points further negative, not positive. I trust
+fold 2, and the conclusion is stronger for it.
+
+### G3 and G4
+G3 (train only on analog + near-analogs) is catastrophic across all three
+targets: F1 -0.0425, rmse_fuel +0.0443, rmse_nonfuel +0.0438. Expected at 2-3
+training snapshots instead of 10-13, and it re-confirms D's finding that
+training-set size dominates any seasonal alignment.
+
+G4 is flat everywhere (F1 +0.00023, rmse_fuel -0.00024, rmse_nonfuel +0.00006)
+for the reason flagged before running it: its "same calendar quarter one year
+earlier" window only exists from cutoff 2025-04-01 onward, so it is NaN in all
+10 of fold 1's training snapshots and present in only 3 of fold 2's 13, while
+being populated at both validation cutoffs. Sweep 1's variant (c) failed at
+-0.0037 by the same mechanism. `cut_quarter` is also near-collinear with the
+existing `cut_month`. Seasonality cannot be learned from 20 months of history;
+it needs a second year.
+
+### Diagnostic submissions (not submitted)
+Both keep v2's CLV columns byte-identical by construction (copied, then
+asserted equal) and change only Opportunity.
+- `submission_g_dec10.csv`: all 16 snapshots, analog 2024-12-01 weighted x10.
+  Agrees with v2 on 90.09% of customers. Mix: Stable 0.399, Inactivity 0.322,
+  Fuel growth 0.221.
+- `submission_g_dec_only.csv`: classifier trained only on 2024-11-01,
+  2024-12-01, 2025-01-01. Agrees with v2 on 82.65%. Mix: Stable 0.402,
+  Inactivity 0.338, Fuel growth 0.201.
+
+Both shift the mix toward Stable and Inactivity and away from Fuel growth, which
+is the direction validation says is wrong -- Fuel growth is the class the model
+already under-predicts. On validation the equivalent configurations score
+-0.0046 (x10) and -0.0425 (analog-only) on F1, so neither is a candidate.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

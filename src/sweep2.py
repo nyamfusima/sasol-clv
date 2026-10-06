@@ -1205,6 +1205,152 @@ def build_v3(ctx, out='submissions/submission_v3.csv'):
     return sub
 
 
+
+
+# --- G) seasonal analog weighting --------------------------------------------
+
+def analog_of(val_cutoff, cuts):
+    """(analog, near-analogs) present in `cuts`. The analog is the snapshot
+    exactly 12 months before the cutoff; near-analogs are one month either side.
+    Fold 1's analog is the first cutoff we hold, so its window is one-sided."""
+    a = str((pd.Timestamp(val_cutoff) - pd.DateOffset(months=12)).date())
+    near = [str((pd.Timestamp(a) + pd.DateOffset(months=k)).date()) for k in (-1, 1)]
+    return (a if a in cuts else None), [c for c in near if c in cuts]
+
+
+def analog_weights(cut, analog, near, mult, with_near):
+    w = np.ones(len(cut), dtype=float)
+    hot = {analog} | (set(near) if with_near else set())
+    hot.discard(None)
+    for h in hot:
+        w[cut == h] = mult
+    return w
+
+
+def fold_on(ctx, val_cutoff, cuts, extra=None):
+    """A fold with an explicit training-cutoff list (G3 restricts it)."""
+    ctx.pool(cuts)
+    Xtr, ytr, cut = assemble(ctx.snaps, cuts, ('base',), ctx.bc, extra)
+    Xva = T.select(ctx.snaps[val_cutoff][0], ('base',), ctx.bc)
+    if extra is not None:
+        Xva = Xva.join(extra[val_cutoff])
+    return dict(cuts=cuts, Xtr=Xtr, ytr=ytr, cut=cut, Xva=Xva,
+                yva=ctx.snaps[val_cutoff][1], w=None,
+                ycode=ytr.Opportunity.map(ctx.code).to_numpy())
+
+
+def g4_extra(ctx, cuts):
+    """(G4) the customer's spend in the same calendar quarter one year earlier
+    (features.py `season`, window [t-12mo, t-9mo)) plus the snapshot's calendar
+    quarter. Reuses the existing all-blocks cache."""
+    lab = [c for c in cuts if c != TEST_CUTOFF]
+    full = S.load(cuts, ctx.train, ctx.cfg, T.ALL_BLOCKS, label_cutoffs=lab, verbose=False)
+    bcf = T.block_columns(list(full[cuts[0]][0].columns))
+    out = {}
+    for c in cuts:
+        e = full[c][0][bcf['season']].copy()
+        e['cut_quarter'] = (pd.Timestamp(c).month - 1) // 3 + 1
+        out[c] = e
+    return out
+
+
+def block_g(ctx, ref):
+    base_reg, _ = best_reg_row(ref)
+    cuts_by = {v: schedule(v, 'monthly') for v in V.FOLDS}
+    an = {v: analog_of(v, cuts_by[v]) for v in V.FOLDS}
+    for v in V.FOLDS:
+        a, n = an[v]
+        print(f'  fold {v}: analog {a}, near {n or "none"} '
+              f'({len(cuts_by[v])} training snapshots)')
+    g4 = g4_extra(ctx, sorted(set(ctx.monthly + [TEST_CUTOFF])))
+
+    specs = ([(f'g1 analog x{m}', m, False, None) for m in (3, 10, 30)]
+             + [(f'g2 analog+near x{m}', m, True, None) for m in (3, 10)]
+             + [('g3 analog+near only', None, True, 'only'),
+                ('g4 season-analog features', None, False, 'feat')])
+    got = {}
+    for name, mult, with_near, mode in specs:
+        f1s, rf, rn = [], [], []
+        for v in V.FOLDS:
+            a, n = an[v]
+            if mode == 'only':
+                keep = [c for c in cuts_by[v] if c == a or c in n]
+                D = fold_on(ctx, v, keep)
+            elif mode == 'feat':
+                D = fold_on(ctx, v, cuts_by[v], extra=g4)
+            else:
+                D = fold_on(ctx, v, cuts_by[v])
+                D['w'] = analog_weights(D['cut'], a, n, mult, with_near)
+            f1s.append(eval_clf(ctx, bag_clf(D['Xtr'], D['ycode'], D['Xva'],
+                                             ctx.labels, w=D['w']), D['yva']))
+            for tgt, acc in (('CLV_fuel', rf), ('CLV_nonfuel', rn)):
+                acc.append(rmse(hurdle_reg(D['Xtr'], D['ytr'][tgt], D['Xva'], w=D['w']),
+                                D['yva'][tgt]))
+            print(f'  {name} fold {v}: {len(D["cuts"])} snaps, {len(D["Xtr"])} rows, '
+                  f'{D["Xtr"].shape[1]} feats', flush=True)
+        got[name] = (f1s, rf, rn)
+
+    for comp, label, incumbent in (('f1', 'Opportunity (vs bagged reference)', ref),
+                                   ('rf', 'CLV_fuel (vs kept hurdle)', base_reg),
+                                   ('rn', 'CLV_nonfuel (vs kept hurdle)', base_reg)):
+        inc = Row('incumbent', f1=incumbent.f1, rf=incumbent.rf, rn=incumbent.rn,
+                  touches=(comp,))
+        inc.kept = 'reference'
+        rows = [inc]
+        for name, (f1s, rf, rn) in got.items():
+            kw = {'f1': dict(f1=f1s), 'rf': dict(rf=rf), 'rn': dict(rn=rn)}[comp]
+            rows.append(Row(name, ref=ref_dict(incumbent), touches=(comp,), **kw))
+        judge(rows, inc)
+        report(f'G  SEASONAL ANALOG -- {label}', rows, inc, comp)
+        print(f'  0.0015 score bar on this component = {component_bar(comp):+.5f}')
+    save('g', {n: dict(f1=a, rf=b, rn=c) for n, (a, b, c) in got.items()})
+    return got
+
+
+def write_g_probes(ctx):
+    """Two diagnostic submissions for the test cutoff: the v2 regressions with
+    the classifier retrained under analog weighting. CLV columns are copied from
+    submission_v2.csv, so they are identical to v2 by construction."""
+    cuts = schedule(TEST_CUTOFF, 'monthly')
+    a, n = analog_of(TEST_CUTOFF, cuts)
+    print(f'  test analog {a}, near {n}')
+    Xte = T.select(ctx.snaps[TEST_CUTOFF][0], ('base',), ctx.bc)
+    test_ids = pd.read_csv('data/test.csv', dtype=str).ID
+    v2 = pd.read_csv('submissions/submission_v2.csv', dtype={'ID': str}).set_index('ID')
+    v2clv = v2[['CLV_fuel', 'CLV_nonfuel']].reindex(test_ids)
+
+    jobs = [('submission_g_dec10.csv', cuts, 10),
+            ('submission_g_dec_only.csv', [c for c in cuts if c == a or c in n], None)]
+    for fname, use, mult in jobs:
+        D = fold_on(ctx, TEST_CUTOFF, use)
+        w = analog_weights(D['cut'], a, n, mult, False) if mult else None
+        if mult:
+            print(f'  {fname}: all {len(use)} snapshots, analog {a} weighted x{mult}')
+        else:
+            print(f'  {fname}: trained only on {use}')
+        opp = T.argmax_labels(bag_clf(D['Xtr'], D['ycode'], Xte, ctx.labels, w=w), ctx.labels)
+        sub = v2clv.copy()
+        sub['Opportunity'] = pd.Series(opp, index=Xte.index).reindex(test_ids).to_numpy()
+        assert len(sub) == 5488, len(sub)
+        assert sub.index.equals(pd.Index(test_ids)), 'IDs do not match data/test.csv'
+        assert sub.notna().all().all(), 'missing predictions'
+        assert not set(sub.Opportunity) - set(ctx.labels), 'label outside config'
+        assert (sub[['CLV_fuel', 'CLV_nonfuel']] >= 0).all().all(), 'negative CLV'
+        assert sub[['CLV_fuel', 'CLV_nonfuel']].equals(v2clv), 'CLV drifted from v2'
+        assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
+        Path('submissions').mkdir(exist_ok=True)
+        sub.rename_axis('ID').reset_index().to_csv(f'submissions/{fname}', index=False)
+        agree = (v2.Opportunity.reindex(test_ids).to_numpy() == sub.Opportunity.to_numpy()).mean()
+        print(f'    wrote submissions/{fname}: 5488 rows, CLV identical to v2, '
+              f'Opportunity agrees with v2 on {agree:.2%}')
+        print('    label mix: ' + ', '.join(
+            f'{k} {v:.3f}' for k, v in
+            sub.Opportunity.value_counts(normalize=True).head(4).items()))
+    print('  (diagnostic only -- not submitted)')
+
+
+BLOCKS['g'] = block_g
+BLOCKS['gprobes'] = lambda ctx, ref: write_g_probes(ctx)
 BLOCKS['freg'] = block_freg
 BLOCKS['v3'] = lambda ctx, ref: build_v3(ctx)
 
