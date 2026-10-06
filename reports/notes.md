@@ -701,6 +701,133 @@ model's ranking and corrects its threshold.
 candidate: it inherits bag20's halved flip rate and adds a one-parameter
 adjustment validated on each fold by the other.
 
+## Block H -- decision calibration (6 Oct). Largest gain since the hurdle.
+
+All of block H works on saved bag20 probabilities: per-class multiplicative
+weights applied before the argmax, no model refitting. Base is bag20 + Fuel
+growth x1.25 (score 0.28668, F1 0.4968 / 0.5096).
+
+**Class mix drifts monotonically**, which shapes every result here. Inactivity
+rises in 16 of 16 snapshots (0.0725 at 2024-06 to 0.2742 at 2025-09) while Stable
+falls (0.3654 to 0.2680) and adoption halves (0.1395 to 0.0703). So any target
+mix taken from the last fully observed snapshot is stale by construction:
+
+| fold | target from | target Inactivity | true Inactivity | 4-class drift |
+| --- | --- | --- | --- | --- |
+| 2025-06-01 | 2025-03-01 | 0.222 | 0.258 | 0.106 |
+| 2025-09-01 | 2025-06-01 | 0.258 | 0.274 | 0.053 |
+
+### H1 Fuel-growth weight curve (nothing fitted, just evaluated)
+| weight | fold 2025-06 | fold 2025-09 | mean F1 |
+| --- | --- | --- | --- |
+| 1.000 | 0.4937 | 0.5045 | 0.4991 |
+| 1.125 | 0.4966 | **0.5099** | **0.5033** |
+| 1.250 | **0.4968** | 0.5096 | 0.5032 |
+| 1.375 | 0.4957 | 0.5070 | 0.5014 |
+| 1.500 | 0.4940 | 0.5053 | 0.4996 |
+| 1.625 | 0.4884 | 0.5045 | 0.4965 |
+| 1.750 | 0.4828 | 0.5001 | 0.4914 |
+| 1.875 | 0.4764 | 0.4952 | 0.4858 |
+| 2.000 | 0.4644 | 0.4887 | 0.4765 |
+
+Peak at 1.25 on fold 1 and 1.125 on fold 2 -- **adjacent grid points, so the two
+folds agree on the location to within one step**. The optimum is a plateau: mean
+F1 is within 0.001 of the peak across 1.125-1.250, then falls away steeply
+(-0.027 by x2.0). That asymmetry is useful: over-weighting is far more dangerous
+than under-weighting, so 1.25 sits safely on the flat part. Nothing clears the
+bar because the base already *is* the plateau.
+
+### H2 prior matching by IPF, no fitted parameters -- all dropped
+| variant | fold 2025-06 | fold 2025-09 | mean F1 | delta |
+| --- | --- | --- | --- | --- |
+| all 17 classes | 0.4933 | 0.5080 | 0.5007 | -0.0026 |
+| 4 large only | 0.4961 | 0.5100 | 0.5030 | -0.0002 |
+| all 17, mean of last 3 | 0.4923 | 0.5075 | 0.4999 | -0.0033 |
+
+IPF matches the target mix essentially exactly (mix error 0.000-0.005), so the
+method works mechanically -- it just does not help. Matching a stale target
+moves the predictions toward last quarter's proportions, and the drift means
+that is the wrong place to move them.
+
+### H3 partial matching -- 5 of 12 variants KEPT, best result in the project
+Weights from H2 raised to a power alpha.
+
+| variant | fold 2025-06 | fold 2025-09 | mean F1 | score | delta | kept |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4 large, alpha 0.25 | 0.4984 | 0.5129 | 0.5056 | 0.28765 | +0.00097 | dropped |
+| **4 large, alpha 0.5** | **0.5022** | **0.5173** | **0.5098** | **0.28929** | **+0.00262** | **KEPT** |
+| 4 large, alpha 0.75 | 0.4999 | 0.5156 | 0.5078 | 0.28851 | +0.00183 | KEPT |
+| 4 large, alpha 1.0 | 0.4961 | 0.5100 | 0.5030 | 0.28661 | -0.00007 | dropped |
+| all 17, alpha 0.5 | 0.5028 | 0.5153 | 0.5090 | 0.28901 | +0.00233 | KEPT |
+| all 17, alpha 0.75 | 0.5001 | 0.5145 | 0.5073 | 0.28831 | +0.00163 | KEPT |
+| last-3, alpha 0.5 | 0.5017 | 0.5150 | 0.5084 | 0.28874 | +0.00206 | KEPT |
+
+**alpha = 0.5 is cross-fold validated**: each fold's own alpha search picked 0.5
+independently, so scoring 0.5 on the other fold is a genuine held-out test, and
+both held-out folds improve (+0.0054 on fold 1, +0.0077 on fold 2). There is a
+clear interior optimum -- 0.5032 at no correction, 0.5056 at 0.25, 0.5098 at 0.5,
+0.5078 at 0.75, 0.5030 at 1.0.
+
+Why an interior optimum rather than full matching? Not only staleness. Forcing
+the predicted marginal to equal *any* target costs accuracy when the model's
+ranking is imperfect, so the best point trades calibration against ranking. Full
+matching (alpha=1) gives back the entire gain even though it hits the target mix
+most precisely -- matching the mix is not the objective, weighted F1 is.
+
+Residual selection to be honest about: alpha is cross-fold validated, but the
+choice among the three target variants was made by comparing both folds. The
+three best-alpha variants score 0.28929 / 0.28901 / 0.28874 -- a 0.00055 spread,
+and all three pass the rule -- so that choice is low-stakes.
+
+### H4 one-at-a-time weights on top of Fuel x1.25 -- nothing kept
+| class | fold-1 fit | fold-2 fit | same direction | both held-out folds up |
+| --- | --- | --- | --- | --- |
+| Stable | 0.90 | 0.80 | yes | no |
+| Inactivity | 1.00 | 1.00 | n/a (no change wanted) | no |
+| growth:Other | 2.00 | 1.25 | yes | no |
+
+Stable and growth:Other agreed on direction but neither improved both held-out
+folds, and Inactivity's search wanted no change at all. **Yet H3, which moves all
+four large classes jointly, gains +0.0066 mean F1.** The adjustment is genuinely
+joint: shifting Stable down only helps when Inactivity and Fuel move at the same
+time, which one-at-a-time search cannot find.
+
+### submission_v3.csv
+Test-time rule, no labels from the thing being predicted: IPF the test
+probabilities to the observed 2025-09-01 class mix over the four large classes,
+raise those weights to 0.5, argmax. Regressions are bag20's, unchanged.
+
+| | v3 predicted | 2025-09 observed |
+| --- | --- | --- |
+| Stable | 0.333 | 0.268 |
+| Inactivity | 0.295 | 0.274 |
+| Fuel growth | 0.259 | 0.274 |
+| growth:Other | 0.060 | 0.053 |
+| adoption (all) | 0.006 | 0.070 |
+
+Adoption stays near zero because only the four large classes are matched, which
+is consistent with block C: the adoption classes are unmonetisable under
+weighted F1 even with an oracle.
+
+Note on the CLV columns: they match bag20 to within 1 ULP (max 4.4e-16, 90 of
+5,488 rows). In memory they are exactly equal and that is asserted before
+writing; the difference is pandas' default CSV float formatting not
+round-tripping the final bit. The official `label_rules.py` writes with
+`float_format='%.17g'` for exactly this reason. Irrelevant at scoring precision.
+
+### Candidate summary after block H
+| File | Score | Mean F1 | Note |
+| --- | --- | --- | --- |
+| `submission_baseline_v1.csv` | 0.28164 | 0.4998 | single seed |
+| `submission_v2.csv` | 0.28553 | 0.5006 | 5-seed + hurdle; public 0.2991 |
+| `submission_v2_bag20.csv` | 0.28502 | 0.4991 | 20-seed, flip rate 1.42% |
+| `submission_v2_prior.csv` | 0.28668 | 0.5032 | bag20 + Fuel x1.25 |
+| **`submission_v3.csv`** | **0.28929** | **0.5098** | bag20 + prior matching at alpha 0.5 |
+
+v3 is +0.00376 over v2 and +0.00262 over v2_prior. Every gain in the project now
+comes from three places: seed bagging, the hurdle regressions, and decision
+calibration. No feature, model or structural change ever helped.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
