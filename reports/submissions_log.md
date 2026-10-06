@@ -28,9 +28,11 @@ RMSE/F1 columns above are fold 2 (1 Sep 2025), matching this log's convention.
 
 Public feedback: v2 scored **0.2991**. The single-seed baseline's public score
 works out to 0.29741 from its reported components, so bagging + the hurdle moved
-the public score about +0.0017 against the +0.00389 validation predicted --
-directionally confirmed, roughly 44% of the predicted size. Worth remembering
-when reading any future validation gain of this magnitude.
+the public score by about +0.0017 where validation predicted +0.00389. **The
+public result confirms the direction of the gain; its size is within public-board
+noise.** The public split is roughly 1,650 customers, and one observation on that
+many customers cannot establish how validation gains translate -- do not read a
+ratio into it.
 
 submission_v2 validation: 5,488 rows, IDs match data/test.csv, 11 distinct
 labels all in label_config.json, both CLV columns >= 0 (min 0.0256).
