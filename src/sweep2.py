@@ -796,8 +796,6 @@ def main():
         print(f'\n[block {b} took {time.time() - t0:.0f}s]', flush=True)
 
 
-if __name__ == '__main__':
-    main()
 
 
 # --- F) new information ------------------------------------------------------
@@ -1125,3 +1123,7 @@ def rejudge():
 
 
 BLOCKS['rejudge'] = lambda ctx, ref: rejudge()
+
+
+if __name__ == '__main__':
+    main()
