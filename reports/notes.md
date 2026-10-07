@@ -954,6 +954,59 @@ Numerically none of this matters at scoring precision -- 4.4e-16 on a value of
 1.9 cannot move an RMSE at four decimals. It matters for reproducibility claims:
 without it, "identical to bag20" was not true of the files on disk.
 
+## Sweep 5 (7 Oct) -- maximise
+
+Seed policy: variants are screened at 5 seeds (42-46) and anything promising is
+re-measured at 20 (42-61). Seed sd is 0.00020 against a 0.0015 bar, so screening
+cannot hide a passing effect, and it cuts compute about fourfold. Every reported
+keep decision is at 20 seeds.
+
+Incumbent: v3 = hurdle regressions (bag20) + partial prior matching at alpha 0.5,
+score 0.28929, F1 0.5022 / 0.5173, rmse 0.5969 / 0.5996 and 0.7350 / 0.7451.
+
+### R1 bundle test -- dropped, and the additions are partly redundant
+5-seed screen, score gain against the 5-seed hurdle:
+
+| variant | rmse fuel | rmse nonfuel | score gain |
+| --- | --- | --- | --- |
+| hurdle (sweep2 b1) | 0.5975 / 0.5994 | 0.7352 / 0.7450 | - |
+| + f3f4 features | 0.5957 / 0.6005 | 0.7336 / 0.7448 | +0.00047 |
+| + catboost magnitude | 0.5960 / 0.5989 | 0.7339 / 0.7444 | +0.00075 |
+| + lgbm/cat average | 0.5965 / 0.5989 | 0.7344 / 0.7446 | +0.00052 |
+| bundle f3f4 + lgbm/cat avg | 0.5951 / 0.6003 | 0.7330 / 0.7445 | +0.00081 |
+| **bundle f3f4 + catboost mag** | 0.5949 / 0.6003 | 0.7325 / 0.7443 | **+0.00096** |
+
+**The bundle is sub-additive.** f3f4 alone is +0.00047 and catboost magnitude
+alone +0.00075, summing to +0.00122, but together they give +0.00096 -- 79% of
+the sum. Marginals confirm it from both sides: f3f4 adds only +0.00021 once
+catboost is in (45% of its standalone effect) and catboost adds +0.00049 once
+f3f4 is in (65%). The two changes are mining overlapping signal, so bundling
+sub-bar regression tweaks does not accumulate the way adding independent
+improvements would.
+
+Note also that the CatBoost magnitude alone beats the LightGBM/CatBoost average
+in both the single and the bundled form (+0.00075 against +0.00052; +0.00096
+against +0.00081), which reproduces the B3 finding: CatBoost's magnitude model is
+genuinely better on positive rows rather than merely decorrelated, so averaging
+dilutes it.
+
+20-seed confirmation of the better bundle against v3:
+
+| | fold 1 score | fold 2 score | mean | gain |
+| --- | --- | --- | --- | --- |
+| v3 regressions | 0.288673 | 0.289905 | 0.28929 | - |
+| bundle f3f4 + catboost mag | 0.290410 | 0.289893 | 0.29015 | +0.00086 |
+
+**Dropped**: +0.00086 is well under the bar, and fold 2 is down by 0.000012 --
+essentially flat, but it fails the both-folds condition outright. Fold 1 alone
+gains +0.00174, so the entire mean gain comes from one fold, which is exactly
+the asymmetry the both-folds rule exists to catch.
+
+Running total on the regression side across all sweeps: the hurdle (+0.00212)
+captured the structural win, and everything since -- catboost magnitude
+(+0.00075), f3f4 features (+0.00047), their bundle (+0.00086) -- has been
+scraping the same residual.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
