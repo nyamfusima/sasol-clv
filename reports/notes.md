@@ -1343,6 +1343,84 @@ Restructuring the label space, swapping model families, and re-deriving features
 it can already compute have now failed 14 times between them. That is the case
 for sweep 6 testing new information and nothing else.
 
+## Sweep 6 (7-8 Oct) -- new information only. Nothing passes; no v5.
+
+Six blocks screened as classifier features on top of the lag features, at 5
+seeds, under the fixed v3 decision rule. Incumbent v4_lags = 0.29119 (20 seeds).
+A 5-seed lags-only base is included so "did this block improve?" is judged like
+for like: seeds alone are worth 0.00060 (0.29059 -> 0.29119), enough to mark a
+helpful block as a failure if compared against the 20-seed incumbent.
+
+| block | cols | F1 fold 1 | F1 fold 2 | mean F1 | score | vs 5-seed base |
+| --- | --- | --- | --- | --- | --- | --- |
+| **lags only [5s base]** | 0 | 0.5074 | 0.5160 | 0.5117 | **0.29059** | - |
+| N1 own label history | 30 | 0.5101 | 0.5155 | 0.5128 | 0.29103 | +0.00044 |
+| N3 per-category recency/age | 51 | 0.5112 | 0.5139 | 0.5125 | 0.29092 | +0.00033 |
+| N5 weekly non-fuel and baskets | 26 | 0.5093 | 0.5147 | 0.5120 | 0.29070 | +0.00011 |
+| N4 basket structure | 16 | 0.5075 | 0.5151 | 0.5113 | 0.29042 | -0.00017 |
+| N2 per-category monthly lags | 132 | 0.5062 | 0.5158 | 0.5110 | 0.29031 | -0.00028 |
+| N6 monthly lags 13-18 | 24 | 0.5074 | 0.5136 | 0.5105 | 0.29010 | -0.00049 |
+
+All six land within 0.0009 of each other and of the base. **Not a dilution
+pattern**: block width does not order the results (sizes 30, 51, 26, 16, 132, 24
+against that ranking, with 24 columns last and 51 second), so this is six blocks
+none of which carries meaningful signal, rather than signal being swamped by
+width.
+
+### N7: the three improving blocks combined -- sub-additive at 73%
+| | score | vs 5-seed base |
+| --- | --- | --- |
+| + n1 + n3 + n5 | 0.29124 | +0.00065 |
+| sum of the three individually | - | +0.00089 |
+
++0.00006 against the 20-seed incumbent. Same sub-additivity as R1's regression
+bundle (79%): overlapping information, so stacking marginal blocks does not
+accumulate.
+
+### The all-three-models check, which settles it
+The lag series passed sweep 5 because it improved the classifier AND the
+regressions, and those land on different score components and therefore add.
+Testing the same framing here:
+
+| | rmse fuel | rmse nonfuel |
+| --- | --- | --- |
+| v4_lags | 0.5967 / 0.5972 | 0.7344 / 0.7458 |
+| + n1 + n3 + n5 | 0.5955 / 0.5996 | 0.7363 / 0.7475 |
+
+The blocks **hurt** the regressions: non-fuel worse on both folds, fuel worse on
+fold 2, for -0.00090 on the regression side alone. The comparison is like for
+like -- R5's 5-seed and v4_lags' 20-seed regression numbers agree to four
+decimals, so seed count is not confounding it.
+
+So the combined change is +0.00065 - 0.00090 = about -0.00025, worse than
+v4_lags. No configuration of sweep 6 passes and the 20-seed confirmation was not
+run, because the arithmetic cannot reach 0.0015 from here.
+
+**This corrects an over-general reading of v4_lags.** Treating something as "one
+change across all three models" is not a free uplift. It helps only when the
+change improves every component it touches. Lags did (+0.00139 and +0.00061);
+these blocks improve the classifier marginally and damage the regressions, so the
+same framing converts a marginal gain into a net loss.
+
+### What sweep 6 tells us about the information ceiling
+Sweep 6 was built on the one finding that had worked: the classifier improves
+only when given information it genuinely lacks. These six blocks were chosen to
+be exactly that -- the customer's own past labels, per-category monthly history,
+per-category recency, basket structure, weekly non-fuel series, and a longer
+lookback. All six are new information in the literal sense, none of it derivable
+from the existing columns, and none of it helps.
+
+So the lag series was not an instance of a general rule that new information
+helps. It was specific: monthly resolution on the four series that ARE the
+prediction targets (fuel litres, fuel rands, non-fuel rands, baskets). Widening
+to other quantities, finer categories, or longer history adds nothing. The
+information ceiling is not about having more columns; it is that next-quarter
+behaviour at this horizon is close to unpredictable beyond recent volume and
+recency.
+
+No diagnostic was written: the best non-passing block (N1, +0.00044) is also
+negative against the 20-seed incumbent, so it has no configuration worth probing.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

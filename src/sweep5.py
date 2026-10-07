@@ -1276,6 +1276,127 @@ def track_l5(ctx, args):
 TRACKS['l5'] = track_l5
 
 
+# --- sweep 6: new information only -------------------------------------------
+
+def n_extra(ctx, block, cuts):
+    """Cached features for one sweep-6 block."""
+    import features4 as F4
+    p = Path(f'preds/n_{block}.parquet')
+    have = {}
+    if p.exists():
+        t = pd.read_parquet(p)
+        for c, g in t.groupby('_cutoff', observed=True):
+            have[str(c)] = g.drop(columns=['_cutoff']).set_index('ID')
+    need = [c for c in cuts if c not in have]
+    if need:
+        d = S.load_data(ctx.train, ctx.cfg)
+        pre = F4.precompute(d)
+        labs = {c: ctx.snaps[c][1] for c in ctx.monthly}
+        feats = {c: T.select(ctx.snaps[c][0], ('base',), ctx.bc) for c in ctx.monthly}
+        tgts = S.load_category_targets(ctx.monthly, ctx.train, ctx.cfg, verbose=False)
+        for c in need:
+            ids = ctx.snaps[c][0].index
+            t0 = time.time()
+            if block == 'n1':
+                X = F4.n1(c, ids, labs, feats, tgts, ctx.cfg, ctx.labels)
+            elif block == 'n2':
+                X = F4.n2(c, ids, pre)
+            elif block == 'n3':
+                X = F4.n3(c, ids, pre, ctx.cfg)
+            elif block == 'n4':
+                X = F4.n4(d, c, ids)
+            elif block == 'n5':
+                X = F4.n5(c, ids, pre)
+            elif block == 'n6':
+                X = F4.n6(c, ids, pre)
+            else:
+                raise ValueError(block)
+            have[c] = X
+            print(f'  {block} {c}: {X.shape[1]} cols ({time.time() - t0:.1f}s)', flush=True)
+        pd.concat([have[c].assign(_cutoff=c) for c in sorted(have)])           .rename_axis('ID').reset_index().to_parquet(p, index=False)
+    return {c: have[c] for c in cuts}
+
+
+def cache_test_proba(ctx, extra, tag, seeds=CONFIRM):
+    """Test-cutoff probabilities for a 20-seed classifier, always cached so a
+    later submission or blend never pays for a refit."""
+    p = Path(f'preds/proba_{tag}_test.parquet')
+    if p.exists():
+        return pd.read_parquet(p).set_index('ID')[ctx.labels].to_numpy()
+    cutoffs = W.schedule(W.TEST_CUTOFF, 'monthly')
+    ctx.pool(cutoffs)
+    Xtr, ytr, _ = W.assemble(ctx.snaps, cutoffs, ('base',), ctx.bc, extra=extra)
+    Xte = T.select(ctx.snaps[W.TEST_CUTOFF][0], ('base',), ctx.bc).join(extra[W.TEST_CUTOFF])
+    code = {l: i for i, l in enumerate(ctx.labels)}
+    t0 = time.time()
+    pr = W.bag_clf(Xtr, ytr.Opportunity.map(code).to_numpy(), Xte, ctx.labels, seeds=seeds)
+    pr.rename_axis('ID').reset_index().to_parquet(p, index=False)
+    print(f'  cached test probabilities -> {p} ({time.time() - t0:.0f}s)', flush=True)
+    return pr[ctx.labels].to_numpy()
+
+
+def n_screen(ctx, blocks, seeds=SCREEN, tag_prefix='n'):
+    """Screen one or more sweep-6 blocks as classifier features on top of the lag
+    features, under the fixed v3 decision rule."""
+    labels = ctx.labels
+    cuts = sorted(set(ctx.monthly + list(V.FOLDS) + [W.TEST_CUTOFF]))
+    lags = lag_extra(ctx, cuts)
+    merged = {c: lags[c] for c in cuts}
+    for b in blocks:
+        e = n_extra(ctx, b, cuts)
+        merged = {c: merged[c].join(e[c]) for c in cuts}
+    pr = {}
+    for v in V.FOLDS:
+        D = ctx.fold(v, mode='monthly', extra=merged)
+        t0 = time.time()
+        pr[v] = W.bag_clf(D['Xtr'], D['ycode'], D['Xva'], labels, seeds=seeds).to_numpy()
+        print(f'    {"+".join(blocks)} {v}: {D["Xtr"].shape[1]} features '
+              f'({time.time() - t0:.0f}s)', flush=True)
+    return pr, merged
+
+
+def track_n(ctx, args):
+    """Screen N1-N6 individually at 5 seeds, then combine whatever improved."""
+    labels = ctx.labels
+    lgb_p = {v: pd.read_parquet(f'preds/proba_lags20_{v}.parquet')
+             .set_index('ID')[labels].to_numpy() for v in V.FOLDS}
+    import features4 as F4
+    blocks = list(F4.BLOCKS)
+    print('\n--- sweep 6: each block as classifier features on top of lags (5 seeds) ---')
+    l_header()
+    rows = [l4_eval('v4_lags [20s, incumbent]', ctx, lgb_p, labels)]
+    per = {}
+    for b in blocks:
+        pr, _ = n_screen(ctx, [b])
+        r = l4_eval(f'+ {b} [5s]', ctx, pr, labels)
+        per[b] = r
+        rows.append(r)
+    # the 5-seed base, so "improved" is judged like for like rather than against
+    # the 20-seed incumbent
+    pr0, _ = n_screen(ctx, [])
+    base5 = l4_eval('lags only [5s, screen base]', ctx, pr0, labels)
+    rows.append(base5)
+    good = [b for b in blocks if per[b]['score'] > base5['score']]
+    print(f'\n  blocks that improved on the 5-seed base: {good or "none"}')
+    if len(good) > 1:
+        print('\n--- N7: the improving blocks combined ---')
+        l_header()
+        pr, merged = n_screen(ctx, good)
+        comb = l4_eval(f'+ {"+".join(good)} [5s]', ctx, pr, labels)
+        rows.append(comb)
+        add = sum(per[b]['score'] - base5['score'] for b in good)
+        print(f'  sum of individual gains {add:+.5f} vs combined '
+              f'{comb["score"] - base5["score"]:+.5f}  '
+              f'({(comb["score"] - base5["score"]) / add * 100:.0f}% of the sum)'
+              if add else '')
+    save('n', dict(rows=rows, good=good, base5=base5))
+    return rows
+
+
+TRACKS['n'] = track_n
+
+
+
 
 
 
