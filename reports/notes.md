@@ -1064,6 +1064,85 @@ population's. Monthly targets are also far more zero-inflated than quarterly
 ones, pushing the per-month gates toward 0.5 and making the product a noisier
 point estimate. More data on the wrong loss loses to less data on the right one.
 
+### R3 loss and space -- dropped; the stage-2 loss is not a lever
+| variant | rmse fuel | rmse nonfuel | score | delta |
+| --- | --- | --- | --- | --- |
+| current stage 2 (recomputed) | 0.5975 / 0.5994 | 0.7352 / 0.7450 | 0.28921 | +0.00002 |
+| huber | 0.5972 / 0.5994 | 0.7351 / 0.7449 | 0.28928 | +0.00009 |
+| quantile median | 0.5985 / 0.5992 | 0.7351 / 0.7447 | 0.28910 | -0.00009 |
+| tweedie on raw totals | 0.6732 / 0.6641 | 0.8489 / 0.8433 | 0.22177 | -0.06742 |
+| avg(current, huber) | 0.5973 / 0.5994 | 0.7351 / 0.7450 | 0.28926 | +0.00007 |
+| avg(current, quantile) | 0.5975 / 0.5989 | 0.7350 / 0.7448 | 0.28936 | +0.00017 |
+| avg(current, tweedie) | 0.6194 / 0.6172 | 0.7688 / 0.7710 | 0.27019 | -0.01900 |
+
+**Squared loss, Huber and quantile-median all land within 0.0002 score of each
+other.** That is a null with a mechanism: the metric IS RMSE on z = ln(1+y)/s, so
+squared loss on z is already exactly matched to it. Huber and quantile buy
+robustness to heavy tails, and the log transform has already removed them. Do
+not revisit the stage-2 loss.
+
+Tweedie reproduces R2's failure for R2's reason -- it is another raw-space route,
+so it inherits the Jensen bias. Its shrink factors were perfectly stable
+cross-fold (applied = own-fold optimum on all four cells: fuel 0.45/0.45,
+non-fuel 0.40/0.40), so the shrink is well estimated and still cannot repair a
+bias that depends on each customer's dispersion. Non-fuel's 0.40 is again at the
+grid's lower bound, immaterial at a -0.067 gap.
+
+Consistency check: recomputing the incumbent stage 2 from scratch gave 0.28921
+against the 0.28919 carried over from sweep 2, a 0.00002 difference explained by
+4-decimal rounding in the stored baseline.
+
+### R4 model diversity -- dropped; two independent GBDTs agree
+| variant | rmse fuel | rmse nonfuel | score | delta |
+| --- | --- | --- | --- | --- |
+| lightgbm (base) | 0.5975 / 0.5994 | 0.7352 / 0.7450 | 0.28921 | +0.00002 |
+| xgboost alone | 0.5969 / 0.5995 | 0.7353 / 0.7463 | 0.28902 | -0.00017 |
+| extratrees alone | 0.6119 / 0.6063 | 0.7457 / 0.7499 | 0.28203 | -0.00716 |
+| ridge on signed-log features | 0.6691 / 0.6681 | 0.7501 / 0.7539 | 0.25637 | -0.03282 |
+| lgbm + xgboost blend | 0.5973 / 0.5991 | 0.7351 / 0.7454 | 0.28923 | +0.00004 |
+| lgbm + extratrees blend | 0.5981 / 0.5992 | 0.7353 / 0.7447 | 0.28916 | -0.00003 |
+| lgbm + ridge blend | 0.5986 / 0.5991 | 0.7348 / 0.7446 | 0.28917 | -0.00002 |
+
+**XGBoost comes within 0.00017 of LightGBM.** Two independent implementations with
+different split finding and regularisation reaching the same number is much
+stronger evidence than one library's tuning ceiling: the gradient-boosted fit on
+these features is saturated. The weaker families rule out the alternative
+explanation that GBDT is overfitting -- ExtraTrees is -0.0072 and ridge -0.0328,
+so the capacity is being used, not wasted.
+
+Blends give nothing (all within 0.00004 of base) and the cross-fold weights
+disagree for xgboost (0.5 against 0.1) and extratrees (0.1 against 0.2). Only
+ridge's weights agreed, at 0.1/0.1, for -0.00002.
+
+### R5 monthly lag series for the regressors -- dropped at +0.00061
+| variant | rmse fuel | rmse nonfuel | score | delta |
+| --- | --- | --- | --- | --- |
+| hurdle (base) | 0.5975 / 0.5994 | 0.7352 / 0.7450 | 0.28919 | - |
+| + lag series (62 columns) | 0.5967 / 0.5972 | 0.7344 / 0.7458 | 0.28980 | +0.00061 |
+
+Fuel improves on both folds (-0.0008, -0.0022); non-fuel improves fold 1 and
+gives back 0.0008 on fold 2, inside the component slack. It satisfies conditions
+(2) and (3) and fails only on magnitude -- the cleanest sub-bar regression result
+in the project. Lags (+0.00061) beat the f3/f4 block (+0.00047), so the
+regressions do retain a little feature headroom, just not 0.0015 from any one
+block, and R1 showed these blocks are sub-additive when combined.
+
+### Track R complete -- nothing passes
+| track | best arm | delta score |
+| --- | --- | --- |
+| R1 bundle | f3f4 + catboost magnitude | **+0.00086** |
+| R5 lag series | 62 lag columns | +0.00061 |
+| R3 loss and space | avg(current, quantile median) | +0.00017 |
+| R4 model diversity | lgbm + xgboost blend | +0.00004 |
+| R2 monthly decomposition | average with shrink | -0.01621 |
+
+Taken together the regression side is closed, and for three separate reasons
+rather than one: the loss is already matched to the metric (R3), the model fit is
+saturated across independent implementations (R4), and the feature headroom that
+remains is both small and sub-additive (R1, R5). Only a different target
+construction could change that, and R2 shows the obvious one loses badly to the
+loss mismatch it introduces.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
