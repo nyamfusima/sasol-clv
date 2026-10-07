@@ -1143,6 +1143,96 @@ remains is both small and sub-additive (R1, R5). Only a different target
 construction could change that, and R2 shows the obvious one loses badly to the
 loss mismatch it introduces.
 
+### L1 lag series for the classifier -- +0.00139 alone, the first feature block
+### ever to improve F1
+| variant | F1 fold 1 | F1 fold 2 | mean | score | delta |
+| --- | --- | --- | --- | --- | --- |
+| bag20 [20s, incumbent] | 0.5022 | 0.5173 | 0.5098 | 0.28929 | - |
+| base features [5s] | 0.5031 | 0.5134 | 0.5082 | 0.28869 | -0.00060 |
+| + lag series [5s] | 0.5074 | 0.5160 | 0.5117 | 0.29008 | +0.00079 |
+| + lag series [20s] | 0.5095 | 0.5169 | 0.5132 | 0.29068 | +0.00139 |
+
+As a classifier-only change this fails by 0.00011 on the gain and also on the
+both-folds condition (fold 2 dips 0.0004). Two things make it more than a near
+miss. The harness validates -- bag20's own probabilities through the recomputed
+rule reproduce v3 exactly. And the effect is stable across seed counts: measured
+like for like at 5 seeds the lag gain is 0.29008 - 0.28869 = +0.00139, identical
+to the 20-against-20 comparison.
+
+**Every one of block F's five feature groups hurt F1 (-0.0012 to -0.0046); lags
+help.** The difference looks structural: lags give monthly resolution on the
+target quantities themselves (fuel litres, non-fuel rands, basket counts), where
+the base features carry only quarterly aggregates. Block F added
+side-information -- sites, timing, vouchers, customer id. Temporal detail on the
+same series is a different kind of addition.
+
+## v4_lags -- KEPT. The lag series as ONE change across all three models
+
+| | F1 f1 | F1 f2 | rmse_f f1 | rmse_f f2 | rmse_n f1 | rmse_n f2 |
+| --- | --- | --- | --- | --- | --- | --- |
+| v3 (incumbent) | 0.5022 | 0.5173 | 0.5969 | 0.5996 | 0.7350 | 0.7451 |
+| v4 lags | 0.5095 | 0.5169 | 0.5967 | 0.5972 | 0.7344 | 0.7458 |
+| delta | +0.0073 | -0.0004 | -0.0002 | -0.0024 | -0.0006 | +0.0007 |
+
+Per-fold combined score 0.28867 / 0.28991 -> **0.29191 / 0.29048**, mean
+**0.29119** against 0.28929.
+
+| condition | value | pass |
+| --- | --- | --- |
+| mean gain >= 0.0015 | **+0.00190** | yes |
+| combined score up on both folds | +0.00324, +0.00057 | yes |
+| worst touched component <= 0.001 | rmse_nonfuel -0.0007 | yes |
+
+**Why one change passes where two halves failed.** As a classifier-only change
+the lag series was +0.00139; as a regression-only change (R5) it was +0.00061.
+Neither clears the bar. Applied to all three models the gains land on DIFFERENT
+components of the score and therefore add, giving +0.00190. Contrast R1, where
+two changes both aimed at the regressions came out sub-additive at 79% of their
+parts because they were mining the same residual. Measuring a single change
+against its own component baseline understates it whenever the change touches
+more than one component.
+
+Caveat worth carrying into the final pick: fold 1 contributes +0.00324 and fold
+2 only +0.00057, and fold 2's F1 actually dips 0.0004. It satisfies the rule, but
+it passes on fold 1's strength with fold 2 merely not objecting.
+
+### Track D on the lag classifier's probabilities -- alpha stays 0.5
+| alpha | F1 fold 1 | F1 fold 2 | mean |
+| --- | --- | --- | --- |
+| 0.25 | 0.5024 | 0.5116 | 0.5070 |
+| **0.5** | 0.5095 | **0.5169** | 0.5132 |
+| 0.75 | **0.5141** | 0.5137 | 0.5139 |
+| 1.0 | 0.5063 | 0.5088 | 0.5075 |
+
+Cross-fold the folds DISAGREE -- fold 1's own search picks 0.75 and fold 2's
+picks 0.5 -- so alpha stays 0.5 as agreed. alpha 0.75's marginally better mean
+(0.5139) is fold 1's +0.0046 cancelling fold 2's -0.0032, the kind of average
+that does not survive out of sample.
+
+Useful by-product: **the decision rule is now independently re-validated on a
+different probability model.** alpha=0.5 was selected cross-fold on bag20's
+probabilities in block H and survives re-fitting on the lag classifier's, an
+interior optimum in the same place both times.
+
+`submissions/submission_v4_lags.csv`: 5,488 rows, IDs match, labels in config,
+CLV >= 0 (min 0.0264), IPF mix error 0.000. Predicted mix Stable 0.327,
+Inactivity 0.297, Fuel growth 0.261, growth:Other 0.064. Opportunity agrees with
+v3 on 93.06% of customers.
+
+### Candidate summary
+| File | Score | Mean F1 | Note |
+| --- | --- | --- | --- |
+| `submission_baseline_v1.csv` | 0.28164 | 0.4998 | single seed |
+| `submission_v2.csv` | 0.28553 | 0.5006 | 5-seed + hurdle; public 0.2991 |
+| `submission_v2_bag20.csv` | 0.28502 | 0.4991 | 20-seed |
+| `submission_v2_prior.csv` | 0.28668 | 0.5032 | + Fuel x1.25 |
+| `submission_v3.csv` | 0.28929 | 0.5098 | + partial prior matching |
+| **`submission_v4_lags.csv`** | **0.29119** | **0.5132** | + lag series on all three models |
+
+Four kept changes in the project: seed bagging (+0.00178), hurdle regressions
+(+0.00212), partial prior matching (+0.00262 over Fuel x1.25, itself +0.00115
+over bag20), and the lag series (+0.00190). Total 0.28164 -> 0.29119, +0.00955.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

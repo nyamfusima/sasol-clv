@@ -613,6 +613,318 @@ TRACKS['r4'] = track_r4
 TRACKS['r5'] = track_r5
 
 
+# --- shared track-L harness ---------------------------------------------------
+
+BIG4 = C.BIG
+V3_ALPHA = 0.5
+
+
+def v3_rule(ctx, proba, cutoff, labels):
+    """The v3 decision rule, recomputed on the probabilities it is applied to:
+    IPF the predicted mix to the last fully observed snapshot's true mix over the
+    four large classes, then damp the weights by alpha=0.5.
+
+    Recomputing matters. The IPF weights are a property of the probability
+    matrix, so carrying bag20's weights onto a different model would measure the
+    new model against a rule calibrated for the old one. The PROCEDURE is held
+    fixed (stale target, 4 large classes, alpha 0.5); only the weights move.
+    """
+    import project_mix as PM
+    big = [labels.index(l) for l in BIG4]
+    shares = PM.share_matrix(ctx.snaps, ctx.monthly, labels)
+    tgt = PM.project(shares, M.trainable_for(ctx.monthly, cutoff), cutoff, labels, 'stale')
+    w, err = C.ipf(proba, tgt, labels, big)
+    return C.ap(proba, w ** V3_ALPHA, labels), w, err
+
+
+def l_eval(name, ctx, proba_by_fold, labels, extra_note=''):
+    """F1 of a probability model under the v3 rule, with v3's regressions held
+    fixed so touches=('f1',)."""
+    f1s = []
+    for v in V.FOLDS:
+        pred, _, err = v3_rule(ctx, proba_by_fold[v], v, labels)
+        f1s.append(C.f1w(ctx.snaps[v][1].Opportunity.to_numpy(), pred))
+    s = score(f1s, V3_RF, V3_RN)
+    base = score(V3_F1, V3_RF, V3_RN)
+    gain = s - base
+    both = all(f1s[i] > V3_F1[i] for i in (0, 1))
+    worst = max(V3_F1[i] - f1s[i] for i in (0, 1))
+    ok = gain >= 0.0015 and both and worst <= 0.001
+    why = []
+    if gain < 0.0015:
+        why.append(f'gain {gain:+.5f}<0.0015')
+    if not both:
+        why.append('one fold down')
+    if worst > 0.001:
+        why.append(f'f1 -{worst:.4f}')
+    verdict = 'KEPT' if ok else 'dropped'
+    print(f'{name:<40}{f1s[0]:>9.4f}{f1s[1]:>9.4f}{np.mean(f1s):>9.4f}{s:>10.5f}'
+          f'{gain:>+10.5f}  {verdict} {" ".join(why)} {extra_note}')
+    return dict(name=name, f1=f1s, score=s, gain=gain, keep=verdict,
+                note=' '.join(why))
+
+
+def l_header():
+    print(f'{"variant":<40}{"F1 f1":>9}{"F1 f2":>9}{"mean":>9}{"score":>10}{"gain":>10}'
+          f'  verdict')
+
+
+def bag20_proba(labels):
+    out = {}
+    for v in V.FOLDS:
+        p = pd.read_parquet(f'preds/oof_bag20_{v}.parquet').set_index('ID')
+        out[v] = p[labels].to_numpy()
+    return out
+
+
+def clf_proba(ctx, seeds, extra=None, mode='monthly'):
+    """LightGBM 17-class probabilities per fold, optionally with extra features."""
+    out = {}
+    for v in V.FOLDS:
+        D = ctx.fold(v, mode=mode, extra=extra)
+        out[v] = W.bag_clf(D['Xtr'], D['ycode'], D['Xva'], ctx.labels,
+                           seeds=seeds).to_numpy()
+    return out
+
+
+# --- L1 lag series as classifier features -------------------------------------
+
+def track_l1(ctx, args):
+    labels = ctx.labels
+    cuts = sorted(set(ctx.monthly + list(V.FOLDS) + [W.TEST_CUTOFF]))
+    extra = lag_extra(ctx, cuts)
+    print('\n--- L1 lag series as classifier features ---')
+    l_header()
+    rows = []
+    # reference: bag20 probabilities under the same rule (must reproduce v3)
+    rows.append(l_eval('bag20 [20s, incumbent]', ctx, bag20_proba(labels), labels))
+    for tag, seeds in (('[5s]', SCREEN),):
+        rows.append(l_eval(f'base features {tag}', ctx, clf_proba(ctx, seeds), labels))
+        t0 = time.time()
+        rows.append(l_eval(f'+ lag series {tag}', ctx,
+                           clf_proba(ctx, seeds, extra=extra), labels,
+                           extra_note=f'({time.time() - t0:.0f}s)'))
+    best = max(rows[1:], key=lambda r: r['score'])
+    if best['name'].startswith('+ lag') and best['score'] > rows[1]['score']:
+        print('\n  lag series beat base features at 5 seeds; confirming at 20')
+        l_header()
+        rows.append(l_eval('+ lag series [20s]', ctx,
+                           clf_proba(ctx, CONFIRM, extra=extra), labels))
+    save('l1', dict(rows=rows))
+    return rows
+
+
+TRACKS['l1'] = track_l1
+
+
+# --- lag series as ONE change across all three models -------------------------
+
+def cached_clf_proba(ctx, seeds, extra, tag, cutoffs=None):
+    """LightGBM 17-class probabilities per fold, cached so track D does not pay
+    for a refit."""
+    out = {}
+    for v in V.FOLDS:
+        p = Path(f'preds/proba_{tag}_{v}.parquet')
+        if p.exists():
+            out[v] = pd.read_parquet(p).set_index('ID')[ctx.labels].to_numpy()
+            continue
+        t0 = time.time()
+        D = ctx.fold(v, mode='monthly', extra=extra)
+        pr = W.bag_clf(D['Xtr'], D['ycode'], D['Xva'], ctx.labels, seeds=seeds)
+        pr.rename_axis('ID').reset_index().to_parquet(p, index=False)
+        out[v] = pr[ctx.labels].to_numpy()
+        print(f'  classifier probabilities {v} ({time.time() - t0:.0f}s)', flush=True)
+    return out
+
+
+def combined_rule(f1s, rf, rn):
+    """Standing rule on a change that touches all three components."""
+    s = score(f1s, rf, rn)
+    b = score(V3_F1, V3_RF, V3_RN)
+    per = [M.combined(f1s[i], rf[i], rn[i]) for i in (0, 1)]
+    ref = [M.combined(V3_F1[i], V3_RF[i], V3_RN[i]) for i in (0, 1)]
+    both = all(per[i] > ref[i] for i in (0, 1))
+    worst, wname = 0.0, ''
+    for i in (0, 1):
+        for nm, dv in (('f1', V3_F1[i] - f1s[i]), ('rmse_fuel', rf[i] - V3_RF[i]),
+                       ('rmse_nonfuel', rn[i] - V3_RN[i])):
+            if dv > worst:
+                worst, wname = dv, nm
+    gain = s - b
+    ok = gain >= 0.0015 and both and worst <= 0.001
+    why = []
+    if gain < 0.0015:
+        why.append(f'gain {gain:+.5f}<0.0015')
+    if not both:
+        why.append('one fold down')
+    if worst > 0.001:
+        why.append(f'{wname} -{worst:.4f}')
+    return dict(score=s, gain=gain, per_fold=per, ref_per_fold=ref,
+                keep='KEPT' if ok else 'dropped', note=' '.join(why),
+                worst=worst, worst_name=wname)
+
+
+def track_v4lags(ctx, args):
+    labels = ctx.labels
+    big = [labels.index(l) for l in BIG4]
+    cuts = sorted(set(ctx.monthly + list(V.FOLDS) + [W.TEST_CUTOFF]))
+    extra = lag_extra(ctx, cuts)
+
+    print('  classifier: lag features, 20 seeds')
+    pr = cached_clf_proba(ctx, CONFIRM, extra, 'lags20')
+    f1s = []
+    for v in V.FOLDS:
+        pred, _, _ = v3_rule(ctx, pr[v], v, labels)
+        f1s.append(C.f1w(ctx.snaps[v][1].Opportunity.to_numpy(), pred))
+
+    print('  regressors: hurdle + lag features, 20 seeds')
+    W.SEEDS = list(CONFIRM)
+    t0 = time.time()
+    rf, rn = W.reg_rmses(ctx, 'hurdle', mode='monthly', extra=extra)
+    print(f'    ({time.time() - t0:.0f}s)')
+
+    j = combined_rule(f1s, rf, rn)
+    print('\n--- lag series as ONE change across all three models, 20 seeds ---')
+    print(f'{"":<22}{"F1 f1":>9}{"F1 f2":>9}{"rmse_f f1":>11}{"rmse_f f2":>11}'
+          f'{"rmse_n f1":>11}{"rmse_n f2":>11}')
+    print(f'{"v3 (incumbent)":<22}{V3_F1[0]:>9.4f}{V3_F1[1]:>9.4f}{V3_RF[0]:>11.4f}'
+          f'{V3_RF[1]:>11.4f}{V3_RN[0]:>11.4f}{V3_RN[1]:>11.4f}')
+    print(f'{"v4 lags":<22}{f1s[0]:>9.4f}{f1s[1]:>9.4f}{rf[0]:>11.4f}{rf[1]:>11.4f}'
+          f'{rn[0]:>11.4f}{rn[1]:>11.4f}')
+    print(f'{"delta":<22}{f1s[0]-V3_F1[0]:>+9.4f}{f1s[1]-V3_F1[1]:>+9.4f}'
+          f'{rf[0]-V3_RF[0]:>+11.4f}{rf[1]-V3_RF[1]:>+11.4f}'
+          f'{rn[0]-V3_RN[0]:>+11.4f}{rn[1]-V3_RN[1]:>+11.4f}')
+    print(f'\n  per-fold combined score: v3 {j["ref_per_fold"][0]:.5f} / '
+          f'{j["ref_per_fold"][1]:.5f}   v4 {j["per_fold"][0]:.5f} / {j["per_fold"][1]:.5f}')
+    print(f'  mean {j["score"]:.5f} vs 0.28929, gain {j["gain"]:+.5f}')
+    print(f'  worst component move: {j["worst_name"] or "none"} '
+          f'-{j["worst"]:.4f} (slack 0.001)')
+    print(f'  -> {j["keep"]} {j["note"]}')
+
+    # --- track D on the cached lag probabilities --------------------------
+    print('\n--- track D: alpha grid on the lag classifier probabilities ---')
+    import project_mix as PM
+    shares = PM.share_matrix(ctx.snaps, ctx.monthly, labels)
+    W_ipf, truth = {}, {}
+    for v in V.FOLDS:
+        tgt = PM.project(shares, M.trainable_for(ctx.monthly, v), v, labels, 'stale')
+        W_ipf[v], _ = C.ipf(pr[v], tgt, labels, big)
+        truth[v] = ctx.snaps[v][1].Opportunity.to_numpy()
+    for al in (0.25, 0.5, 0.75, 1.0):
+        fs = [C.f1w(truth[v], C.ap(pr[v], W_ipf[v] ** al, labels)) for v in V.FOLDS]
+        print(f'    alpha {al}: F1 {fs[0]:.4f} / {fs[1]:.4f}  mean {np.mean(fs):.4f}')
+    picks = {}
+    for fit_on in V.FOLDS:
+        other = [x for x in V.FOLDS if x != fit_on][0]
+        pa = max((0.25, 0.5, 0.75, 1.0),
+                 key=lambda al: C.f1w(truth[fit_on],
+                                      C.ap(pr[fit_on], W_ipf[fit_on] ** al, labels)))
+        picks[other] = (pa, C.f1w(truth[other], C.ap(pr[other], W_ipf[other] ** pa, labels)))
+    agree = len({p[0] for p in picks.values()}) == 1
+    print('    cross-fold: ' + ' | '.join(
+        f'alpha {p[0]} from the other fold, held-out F1 on {k} = {p[1]:.4f}'
+        for k, p in picks.items()) + ('  AGREE' if agree else '  DISAGREE'))
+    alpha = list(picks.values())[0][0] if agree else 0.5
+    print(f'    -> using alpha {alpha}' + ('' if agree else ' (folds disagreed, '
+                                           'keeping 0.5)'))
+    if alpha != V3_ALPHA:
+        f1s = [C.f1w(truth[v], C.ap(pr[v], W_ipf[v] ** alpha, labels)) for v in V.FOLDS]
+        j = combined_rule(f1s, rf, rn)
+        print(f'    with alpha {alpha}: F1 {f1s[0]:.4f} / {f1s[1]:.4f}, score '
+              f'{j["score"]:.5f}, gain {j["gain"]:+.5f} -> {j["keep"]} {j["note"]}')
+
+    save('v4lags', dict(f1=f1s, rf=rf, rn=rn, alpha=alpha, agree=bool(agree),
+                        **{k: v for k, v in j.items() if k != 'ref_per_fold'}))
+    if j['keep'] != 'KEPT':
+        print('\nthe combined change does not pass -> not writing submission_v4_lags.csv')
+        return j
+    write_v4_lags(ctx, extra, alpha)
+    return j
+
+
+def write_v4_lags(ctx, extra, alpha, out='submissions/submission_v4_lags.csv'):
+    labels = ctx.labels
+    big = [labels.index(l) for l in BIG4]
+    import project_mix as PM
+    cutoffs = W.schedule(W.TEST_CUTOFF, 'monthly')
+    ctx.pool(cutoffs)
+    Xtr, ytr, _ = W.assemble(ctx.snaps, cutoffs, ('base',), ctx.bc, extra=extra)
+    Xte = T.select(ctx.snaps[W.TEST_CUTOFF][0], ('base',), ctx.bc).join(extra[W.TEST_CUTOFF])
+    print(f'  final fit: {len(Xtr)} rows, {Xtr.shape[1]} features, {len(CONFIRM)} seeds')
+    W.SEEDS = list(CONFIRM)
+    code = {l: i for i, l in enumerate(labels)}
+    t0 = time.time()
+    pte = W.bag_clf(Xtr, ytr.Opportunity.map(code).to_numpy(), Xte, labels,
+                    seeds=CONFIRM).to_numpy()
+    print(f'    classifier ({time.time() - t0:.0f}s)')
+    shares = PM.share_matrix(ctx.snaps, ctx.monthly, labels)
+    tgt = PM.project(shares, M.trainable_for(ctx.monthly, W.TEST_CUTOFF),
+                     W.TEST_CUTOFF, labels, 'stale')
+    w, err = C.ipf(pte, tgt, labels, big)
+    opp = C.ap(pte, w ** alpha, labels)
+    preds = {}
+    for t in M.TARGETS:
+        t0 = time.time()
+        preds[t] = W.hurdle_reg(Xtr, ytr[t], Xte)
+        print(f'    {t} ({time.time() - t0:.0f}s)')
+    test_ids = pd.read_csv('data/test.csv', dtype=str).ID
+    sub = pd.DataFrame({'CLV_fuel': preds['CLV_fuel'], 'CLV_nonfuel': preds['CLV_nonfuel'],
+                        'Opportunity': opp}, index=Xte.index).reindex(test_ids)
+    assert len(sub) == 5488, len(sub)
+    assert sub.index.equals(pd.Index(test_ids)), 'IDs do not match data/test.csv'
+    assert sub.notna().all().all(), 'missing predictions'
+    assert not set(sub.Opportunity) - set(labels), 'label outside the config'
+    assert (sub[['CLV_fuel', 'CLV_nonfuel']] >= 0).all().all(), 'negative CLV'
+    assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
+    sub.rename_axis('ID').reset_index().to_csv(out, index=False, float_format='%.17g')
+    print(f'  wrote {out}: 5488 rows, IDs match, labels in config, CLV >= 0 '
+          f'(min {sub[["CLV_fuel", "CLV_nonfuel"]].min().min():.4f}), mix-err {err:.3f}')
+    print('  mix: ' + C.fmt_mix(C.mix(sub.Opportunity.to_numpy(), labels), labels))
+    return sub
+
+
+TRACKS['v4lags'] = track_v4lags
+
+
+
+# --- diagnostics --------------------------------------------------------------
+
+def write_diag_r(ctx, out='submissions/submission_diag_r1_bundle.csv'):
+    """Track R's best non-passing variant: v3's labels with the R1 bundle
+    regressions (f3+f4 features, CatBoost magnitude), 20 seeds, all snapshots."""
+    labels = ctx.labels
+    cutoffs = W.schedule(W.TEST_CUTOFF, 'monthly')
+    ctx.pool(cutoffs)
+    extra = W.f_snapshots(ctx, ('f3', 'f4'), sorted(set(cutoffs + [W.TEST_CUTOFF])))
+    Xte = T.select(ctx.snaps[W.TEST_CUTOFF][0], ('base',), ctx.bc).join(extra[W.TEST_CUTOFF])
+    Xtr, ytr, _ = W.assemble(ctx.snaps, cutoffs, ('base',), ctx.bc, extra=extra)
+    W.SEEDS = list(CONFIRM)
+    print(f'  fitting the R1 bundle on {len(Xtr)} rows, {Xtr.shape[1]} features, '
+          f'{len(CONFIRM)} seeds')
+    preds = {}
+    for t in M.TARGETS:
+        t0 = time.time()
+        preds[t] = W.hurdle_reg(Xtr, ytr[t], Xte, cat=True)
+        print(f'    {t} ({time.time() - t0:.0f}s)', flush=True)
+    v3 = pd.read_csv('submissions/submission_v3.csv', dtype={'ID': str},
+                     float_precision='round_trip').set_index('ID')
+    test_ids = pd.read_csv('data/test.csv', dtype=str).ID
+    sub = pd.DataFrame({'CLV_fuel': preds['CLV_fuel'], 'CLV_nonfuel': preds['CLV_nonfuel']},
+                       index=Xte.index).reindex(test_ids)
+    sub['Opportunity'] = v3.Opportunity.reindex(test_ids).to_numpy()
+    assert len(sub) == 5488 and sub.index.equals(pd.Index(test_ids))
+    assert sub.notna().all().all() and not set(sub.Opportunity) - set(labels)
+    assert (sub[['CLV_fuel', 'CLV_nonfuel']] >= 0).all().all()
+    assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity']
+    sub.rename_axis('ID').reset_index().to_csv(out, index=False, float_format='%.17g')
+    print(f'  wrote {out}: 5488 rows, labels identical to v3, CLV from the R1 bundle')
+    return sub
+
+
+TRACKS['diag_r'] = lambda ctx, args: write_diag_r(ctx)
+
+
+
 
 
 

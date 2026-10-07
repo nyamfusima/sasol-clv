@@ -9,6 +9,9 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 
 | 2026-10-06 | submission_v3.csv | bag20 regressions + prior matching to the 2025-09-01 mix (4 large classes) at alpha 0.5 | 0.5996 | 0.7451 | 0.5173 | ? | score 0.28929; best candidate |
 
+| 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, 20 seeds, prior matching alpha 0.5 | 0.5972 | 0.7458 | 0.5169 | ? | score 0.29119; best candidate |
+| 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude) | 0.6003 | 0.7443 | 0.5173 | ? | **diagnostic, not for selection** (track R best non-passer, +0.00086) |
+
 | 2026-10-06 | submission_v2_bag20.csv | 20-seed bag (42-61), monthly, hurdle regressions | 0.5996 | 0.7451 | 0.5045 | ? | score 0.28502; flip rate 1.42% vs 2.91% for 5-seed |
 | 2026-10-06 | submission_v2_prior.csv | bag20 + Fuel-growth prior x1.25 (cross-fold validated) | 0.5996 | 0.7451 | 0.5096 | ? | score 0.28667; best candidate |
 
