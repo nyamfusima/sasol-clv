@@ -1007,6 +1007,63 @@ captured the structural win, and everything since -- catboost magnitude
 (+0.00075), f3f4 features (+0.00047), their bundle (+0.00086) -- has been
 scraping the same residual.
 
+### R2 monthly decomposition -- dropped decisively, and the reason is structural
+
+Construction: for horizon h in {0,1,2} the target is the raw total in the single
+calendar month [c+h, c+h+1). The horizon is a FEATURE, because at predict time
+all three months must be forecast from history available at the cutoff -- we
+cannot use history up to 1 Jan to predict January. A 1-month outcome window also
+needs only one month of future data, so cutoffs extend to 2025-11-01 instead of
+the quarterly 2025-09-01; feature-only snapshots were built at 2025-10-01 and
+2025-11-01 for this. Fold 2's training set grows from 53,025 rows to 174,341.
+
+Correctness check first: three consecutive monthly totals reproduce the cached
+quarterly targets to 9e-13 (float accumulation only), so the decomposition is
+measuring the intended quantity.
+
+| variant | rmse fuel | rmse nonfuel | score | delta |
+| --- | --- | --- | --- | --- |
+| quarterly hurdle (base) | 0.5975 / 0.5994 | 0.7352 / 0.7450 | 0.28919 | - |
+| monthly, no shrink | 0.7244 / 0.6965 | 1.0071 / 0.9811 | 0.15039 | -0.13879 |
+| monthly + cross-fold shrink | 0.6715 / 0.6582 | 0.8323 / 0.8206 | 0.23052 | -0.05867 |
+| average(quarterly, monthly) | 0.6346 / 0.6240 | 0.8161 / 0.8111 | 0.24968 | -0.03951 |
+| average(quarterly, monthly+shrink) | 0.6185 / 0.6152 | 0.7634 / 0.7643 | 0.27298 | -0.01621 |
+
+**The Jensen bias is enormous and I initially left it uncorrected.** The hurdle
+predicts P(y>0)*E[y|y>0], a conditional MEAN in raw space. The metric is RMSE on
+ln(1+Y)/s, and ln(1+mean) > E[ln(1+actual)] for skewed Y, so transforming a mean
+prediction overshoots. Correcting it with a cross-fold shrink factor recovers
++0.080 of score -- more than every improvement found in this project combined --
+which shows the first number was mostly measuring my own bias, not the method.
+
+Shrink factors, fitted on one fold and applied to the other:
+
+| target | fold | applied k | own-fold optimum | true optimum (wide grid) |
+| --- | --- | --- | --- | --- |
+| CLV_fuel | 2025-06 | 0.55 | 0.50 | 0.52 |
+| CLV_fuel | 2025-09 | 0.50 | 0.55 | 0.56 |
+| CLV_nonfuel | 2025-06 | 0.40 | 0.40 | **0.18** |
+| CLV_nonfuel | 2025-09 | 0.40 | 0.40 | **0.19** |
+
+My shrink grid started at 0.40, which was **binding for non-fuel**: the real
+optimum is near 0.18, so that arm was under-corrected. Re-checked on the cached
+raw predictions with a 0.05-1.50 grid. k ~ 0.18 means the raw-mean prediction
+overshoots by about 5.5x in the relevant sense, which fits non-fuel being the
+more zero-inflated target (65% zeros quarterly, more monthly).
+
+**The verdict survives the grid error.** With an ORACLE per-fold shrink -- each
+fold's own optimum, an upper bound no honest procedure can reach -- the score is
+0.24758, still -0.04161 behind the quarterly hurdle. So 3x the training rows and
+two extra months of usable cutoffs do not come close to compensating.
+
+Why the structure loses: the quarterly hurdle fits z = ln(1+Y)/s directly and is
+therefore unbiased for the metric. Any route that predicts raw totals and
+transforms afterwards inherits a bias that a single scalar cannot remove,
+because the right shrink depends on each customer's dispersion, not just the
+population's. Monthly targets are also far more zero-inflated than quarterly
+ones, pushing the per-month gates toward 0.5 and making the product a noisier
+point estimate. More data on the wrong loss loses to less data on the right one.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
