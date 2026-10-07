@@ -4,24 +4,24 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 
 | Date | File | What | Val RMSE fuel | Val RMSE non-fuel | Val F1 | Public | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-10-05 | submission_baseline_v1.csv | LGBM, 16 monthly snapshots, seed 42 | 0.6052 | 0.7489 | 0.5047 | ? | pipeline test |
+| 2026-10-05 | submission_baseline_v1.csv | LGBM, 16 monthly snapshots, seed 42 | 0.6052 | 0.7489 | 0.5047 | 0.2974 | pipeline test |
 | 2026-10-06 | submission_v2.csv | 5-seed bag (42-46), monthly, hurdle regressions, reference classifier | 0.5994 | 0.7450 | 0.5058 | **0.2991** | combined score 0.28553 |
 
-| 2026-10-06 | submission_v3.csv | bag20 regressions + prior matching to the 2025-09-01 mix (4 large classes) at alpha 0.5 | 0.5996 | 0.7451 | 0.5173 | ? | score 0.28929; best candidate |
+| 2026-10-06 | submission_v3.csv | bag20 regressions + prior matching to the 2025-09-01 mix (4 large classes) at alpha 0.5 | 0.5996 | 0.7451 | 0.5173 | 0.3031 | score 0.28929; best candidate |
 
-| 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, 20 seeds, prior matching alpha 0.5 | 0.5972 | 0.7458 | 0.5169 | ? | score 0.29119; best candidate |
-| 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | ? | score 0.29068; -0.00051 vs v4_lags, +0.00139 vs v3 |
-| 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude) | 0.6003 | 0.7443 | 0.5173 | ? | **diagnostic, not for selection** (track R best non-passer, +0.00086) |
+| 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, 20 seeds, prior matching alpha 0.5 | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate |
+| 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | *0.30515 inferred* | score 0.29068; labels identical to v4_lags and CLV identical to v3, so its public score follows exactly; **+0.00065 over v4_lags** |
+| 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude) | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086) |
 
-| 2026-10-06 | submission_v2_bag20.csv | 20-seed bag (42-61), monthly, hurdle regressions | 0.5996 | 0.7451 | 0.5045 | ? | score 0.28502; flip rate 1.42% vs 2.91% for 5-seed |
-| 2026-10-06 | submission_v2_prior.csv | bag20 + Fuel-growth prior x1.25 (cross-fold validated) | 0.5996 | 0.7451 | 0.5096 | ? | score 0.28667; best candidate |
+| 2026-10-06 | submission_v2_bag20.csv | 20-seed bag (42-61), monthly, hurdle regressions | 0.5996 | 0.7451 | 0.5045 | 0.2987 | score 0.28502; flip rate 1.42% vs 2.91% for 5-seed |
+| 2026-10-06 | submission_v2_prior.csv | bag20 + Fuel-growth prior x1.25 (cross-fold validated) | 0.5996 | 0.7451 | 0.5096 | 0.3035 | score 0.28667; best candidate |
 
-| 2026-10-06 | probe_stable.csv | all rows "Stable", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |
-| 2026-10-06 | probe_inactivity.csv | all rows "Inactivity", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |
-| 2026-10-06 | probe_fuelgrowth.csv | all rows "Existing-category growth: Fuel", bagged-reference CLV | 0.5994 | 0.7450 | - | ? | leaderboard probe, not submitted |
+| 2026-10-06 | probe_stable.csv | all rows "Stable", bagged-reference CLV | 0.5994 | 0.7450 | - | 0.1406 | leaderboard probe, not submitted |
+| 2026-10-06 | probe_inactivity.csv | all rows "Inactivity", bagged-reference CLV | 0.5994 | 0.7450 | - | 0.1473 | leaderboard probe, not submitted |
+| 2026-10-06 | probe_fuelgrowth.csv | all rows "Existing-category growth: Fuel", bagged-reference CLV | 0.5994 | 0.7450 | - | 0.1336 | leaderboard probe, not submitted |
 
-| 2026-10-06 | submission_g_dec10.csv | v2 regressions; classifier with analog 2024-12-01 weighted x10 | 0.5994 | 0.7450 | 0.4959* | ? | block G diagnostic, not submitted |
-| 2026-10-06 | submission_g_dec_only.csv | v2 regressions; classifier trained only on 2024-11/12, 2025-01 | 0.5994 | 0.7450 | 0.4580* | ? | block G diagnostic, not submitted |
+| 2026-10-06 | submission_g_dec10.csv | v2 regressions; classifier with analog 2024-12-01 weighted x10 | 0.5994 | 0.7450 | 0.4959* | not submitted | block G diagnostic, not submitted |
+| 2026-10-06 | submission_g_dec_only.csv | v2 regressions; classifier trained only on 2024-11/12, 2025-01 | 0.5994 | 0.7450 | 0.4580* | not submitted | block G diagnostic, not submitted |
 
 \* F1 is the validation score of the equivalent fold configuration, not of the
 test file itself. Both are worse than v2's 0.5058 and are diagnostics only.
@@ -77,6 +77,74 @@ remains the best candidate at 0.28929.
 | d two-stage | 0.4939 | 0.4972 | 0.4956 | dropped |
 | e rule-derived | 0.3842 | 0.3846 | 0.3844 | dropped |
 | f class-prior (held-out) | 0.4969 | 0.5053 | 0.5011 | kept, +0.0013 |
+
+## Validation against public, per kept change
+
+Public components are F1 / RMSE fuel / RMSE non-fuel. Every row is the delta
+between two submitted files, so the public column is measured, not inferred.
+
+| change | val delta | public delta | public dF1 | public d rmse_f | public d rmse_nf |
+| --- | --- | --- | --- | --- | --- |
+| bagging + hurdle (baseline -> v2) | +0.00389 | **+0.0017** | +0.0025 | -0.0013 | -0.0007 |
+| 20-seed bag (v2 -> v2_bag20) | -0.00051 | -0.0004 | -0.0018 | -0.0004 | -0.0003 |
+| Fuel x1.25 prior (bag20 -> v2_prior) | +0.00166 | **+0.0048** | **+0.0120** | 0.0000 | 0.0000 |
+| partial prior matching (v2_prior -> v3) | +0.00262 | **-0.0004** | -0.0008 | 0.0000 | 0.0000 |
+| lag series, all 3 models (v3 -> v4_lags) | +0.00190 | **+0.0014** | +0.0050 | +0.0012 | +0.0003 |
+| R1 bundle regressions (v3 -> diag_r1_bundle) | +0.00086 | **-0.0009** | 0.0000 | worse | worse |
+
+**Label gains transferred; small regression gains did not.**
+- The two large label changes transferred and one amplified. Fuel x1.25 was
+  +0.0041 F1 on validation and **+0.0120 on public**, roughly three times the
+  size. The lag classifier was +0.0034 on validation and +0.0050 on public.
+- The large structural regression change transferred: bagging + hurdle improved
+  public RMSE on both targets (-0.0013, -0.0007).
+- Every small regression refinement failed. The lag regressors made public RMSE
+  **worse** (+0.0012, +0.0003) where validation said better, and the R1 bundle
+  went from +0.00086 on validation to **-0.0009 on public**.
+- The one label change that did not transfer is partial prior matching: +0.00262
+  on validation, -0.0004 on public, with F1 going the wrong way by 0.0008. It
+  was also the most heavily fitted change -- an IPF procedure re-estimated per
+  dataset with alpha chosen cross-fold -- against Fuel x1.25, a single constant
+  both folds independently agreed on. The simpler calibration travelled; the
+  machinery did not.
+
+So the dividing line is not label-versus-regression but **how much machinery a
+change carries**. Single global constants and structural model changes survived
+the public split; per-dataset procedures and sub-0.001 refinements did not.
+
+### The hybrid would have beaten both final picks
+`submission_v4_hybrid.csv` was never submitted, but its public score follows
+exactly, because its labels are bit-identical to v4_lags and its CLV columns are
+bit-identical to v3:
+
+| | F1 | rmse fuel | rmse nonfuel | public |
+| --- | --- | --- | --- | --- |
+| v3 (selected) | 0.5239 | 0.5932 | 0.7233 | 0.3031 |
+| v4_lags (selected) | 0.5289 | 0.5944 | 0.7236 | 0.3045 |
+| **v4_hybrid** (not selected) | 0.5289 | 0.5932 | 0.7233 | **0.30515** |
+
++0.00065 over v4_lags and +0.00205 over v3. It keeps the lag classifier's
++0.0050 F1 and drops the lag regressors' +0.0012/+0.0003 RMSE damage. Validation
+had it dominated by 0.00051 -- exactly backwards, and for the reason the table
+above gives: the lag regressors were a sub-0.001 refinement and did not travel.
+
+### The probes confirm the scoring formula
+The three constant-label probes are scores, not F1 values. For a constant-class
+submission the weighted F1 is 2p^2/(1+p) with p the class's true share, so each
+probe gives 0.4*2p^2/(1+p) + R where R is the regression term they all share.
+Solving with the independently supplied shares:
+
+| probe | score | share | implied F1 | implied R |
+| --- | --- | --- | --- | --- |
+| Stable | 0.1406 | 0.276 | 0.11940 | 0.09284 |
+| Inactivity | 0.1473 | 0.297 | 0.13602 | 0.09289 |
+| Fuel growth | 0.1336 | 0.252 | 0.10144 | 0.09302 |
+
+R agrees across all three to 0.00018, which can only happen if the 0.4/0.3/0.3
+weighting and the 0.74/0.816 normalisers are both right. Inverting instead gives
+shares 0.2757 / 0.2969 / 0.2524 against the supplied 0.276 / 0.297 / 0.252.
+Together with the formula reproducing six public rows to within 0.00006, the
+inferred constants are confirmed as far as they can be without publication.
 
 ## Reference baselines (validation)
 | Method | RMSE fuel | RMSE non-fuel | F1 |
