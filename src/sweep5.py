@@ -886,6 +886,398 @@ def write_v4_lags(ctx, extra, alpha, out='submissions/submission_v4_lags.csv'):
 TRACKS['v4lags'] = track_v4lags
 
 
+# --- L2 to L5: measured on top of the lag features ---------------------------
+
+# v4_lags is the incumbent for L2-L5
+V4_F1 = [0.5095, 0.5169]
+V4_RF = [0.5967, 0.5972]
+V4_RN = [0.7344, 0.7458]
+FAM_SEEDS = (42, 43, 44)     # families are fitted at 3 seeds; see the note below
+
+
+def l4_eval(name, ctx, proba_by_fold, labels, note=''):
+    """F1 under the v3 rule with v4_lags' regressions held fixed."""
+    f1s = []
+    for v in V.FOLDS:
+        pred, _, _ = v3_rule(ctx, proba_by_fold[v], v, labels)
+        f1s.append(C.f1w(ctx.snaps[v][1].Opportunity.to_numpy(), pred))
+    s = score(f1s, V4_RF, V4_RN)
+    b = score(V4_F1, V4_RF, V4_RN)
+    gain = s - b
+    both = all(f1s[i] > V4_F1[i] for i in (0, 1))
+    worst = max(V4_F1[i] - f1s[i] for i in (0, 1))
+    ok = gain >= 0.0015 and both and worst <= 0.001
+    why = []
+    if gain < 0.0015:
+        why.append(f'gain {gain:+.5f}<0.0015')
+    if not both:
+        why.append('one fold down')
+    if worst > 0.001:
+        why.append(f'f1 -{worst:.4f}')
+    print(f'{name:<40}{f1s[0]:>9.4f}{f1s[1]:>9.4f}{np.mean(f1s):>9.4f}{s:>10.5f}'
+          f'{gain:>+10.5f}  {"KEPT" if ok else "dropped"} {" ".join(why)} {note}')
+    return dict(name=name, f1=f1s, score=s, gain=gain,
+                keep='KEPT' if ok else 'dropped', note=' '.join(why))
+
+
+def lag_folds(ctx):
+    cuts = sorted(set(ctx.monthly + list(V.FOLDS) + [W.TEST_CUTOFF]))
+    extra = lag_extra(ctx, cuts)
+    return extra, {v: ctx.fold(v, mode='monthly', extra=extra) for v in V.FOLDS}
+
+
+def family_proba(family, Xtr, ycode, Xva, labels, seeds):
+    """17-class probabilities from one model family, seed-averaged."""
+    from sklearn.ensemble import ExtraTreesClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.neural_network import MLPClassifier
+    nL = len(labels)
+    acc = np.zeros((len(Xva), nL))
+    if family == 'logistic':
+        At, Av = signed_log(Xtr), signed_log(Xva)
+        m = LogisticRegression(max_iter=3000, C=0.5)
+        m.fit(At, ycode)
+        return W.T._wide(m.predict_proba(Av), list(m.classes_), labels, Xva.index).to_numpy()
+    for s in seeds:
+        if family == 'xgboost':
+            import xgboost as xgb
+            m = xgb.XGBClassifier(n_estimators=400, learning_rate=0.03, max_depth=5,
+                                  subsample=0.8, colsample_bytree=0.7, random_state=s,
+                                  tree_method='hist', verbosity=0, n_jobs=-1,
+                                  objective='multi:softprob', num_class=nL)
+            m.fit(Xtr, ycode)
+            cls = [int(c) for c in m.classes_]
+            pr = m.predict_proba(Xva)
+        elif family == 'extratrees':
+            m = ExtraTreesClassifier(n_estimators=300, min_samples_leaf=5,
+                                     random_state=s, n_jobs=-1)
+            m.fit(Xtr.fillna(-999), ycode)
+            cls = list(m.classes_); pr = m.predict_proba(Xva.fillna(-999))
+        elif family == 'mlp':
+            At, Av = signed_log(Xtr), signed_log(Xva)
+            m = MLPClassifier(hidden_layer_sizes=(64,), max_iter=300, random_state=s,
+                              early_stopping=True)
+            m.fit(At, ycode)
+            cls = list(m.classes_); pr = m.predict_proba(Av)
+        elif family == 'catboost':
+            from catboost import CatBoostClassifier
+            m = CatBoostClassifier(iterations=400, learning_rate=0.03, depth=6,
+                                   random_seed=s, loss_function='MultiClass',
+                                   verbose=0, thread_count=-1)
+            m.fit(Xtr, ycode)
+            cls = [int(c) for c in m.classes_]; pr = m.predict_proba(Xva)
+        else:
+            raise ValueError(family)
+        acc += W.T._wide(pr, cls, labels, Xva.index).to_numpy()
+    return acc / len(seeds)
+
+
+def track_l2(ctx, args):
+    """Model-family blends with the lag-feature LightGBM, plus the pairwise
+    probability correlation that says whether a family is different enough to be
+    worth blending at all.
+
+    The LightGBM side is the cached 20-seed lag model; the families are fitted at
+    3 seeds. That asymmetry biases AGAINST the families (their probabilities are
+    noisier), so a family that still helps is a real signal.
+    """
+    labels = ctx.labels
+    extra, folds = lag_folds(ctx)
+    lgb_p = {v: pd.read_parquet(f'preds/proba_lags20_{v}.parquet')
+             .set_index('ID')[labels].to_numpy() for v in V.FOLDS}
+    fams = ['xgboost', 'catboost', 'extratrees', 'logistic', 'mlp']
+    fp, corr = {}, {}
+    for fam in fams:
+        try:
+            for v in V.FOLDS:
+                t0 = time.time()
+                fp[(fam, v)] = family_proba(fam, folds[v]['Xtr'], folds[v]['ycode'],
+                                            folds[v]['Xva'], labels, FAM_SEEDS)
+                print(f'  {fam} {v} ({time.time() - t0:.0f}s)', flush=True)
+        except Exception as e:
+            print(f'  {fam} FAILED: {type(e).__name__}: {e}')
+            for v in V.FOLDS:
+                fp.pop((fam, v), None)
+            continue
+        # correlation with LightGBM: flattened, and averaged over the 4 large classes
+        fl, per = [], []
+        for v in V.FOLDS:
+            a, b = fp[(fam, v)].ravel(), lgb_p[v].ravel()
+            fl.append(float(np.corrcoef(a, b)[0, 1]))
+            cs = []
+            for l in BIG4:
+                j = labels.index(l)
+                cs.append(float(np.corrcoef(fp[(fam, v)][:, j], lgb_p[v][:, j])[0, 1]))
+            per.append(float(np.mean(cs)))
+        corr[fam] = (float(np.mean(fl)), float(np.mean(per)))
+
+    print('\n--- L2 probability correlation with the lag-feature LightGBM ---')
+    print(f'{"family":<14}{"all cells":>12}{"4 large classes":>18}   reading')
+    for fam, (a, b) in sorted(corr.items(), key=lambda kv: kv[1][1]):
+        read = ('nearly identical, blending cannot help' if b > 0.98 else
+                'very similar' if b > 0.95 else
+                'moderately different' if b > 0.85 else 'substantially different')
+        print(f'{fam:<14}{a:>12.4f}{b:>18.4f}   {read}')
+
+    print('\n--- L2 families alone and blended (3-seed families, 20-seed LightGBM) ---')
+    l_header()
+    rows = [l4_eval('v4_lags LightGBM [20s, incumbent]', ctx, lgb_p, labels)]
+    for fam in fams:
+        if (fam, V.FOLDS[0]) not in fp:
+            continue
+        rows.append(l4_eval(f'{fam} alone [3s]', ctx, {v: fp[(fam, v)] for v in V.FOLDS},
+                            labels))
+    for fam in fams:
+        if (fam, V.FOLDS[0]) not in fp:
+            continue
+        picks = {}
+        for fit_on in V.FOLDS:
+            other = [x for x in V.FOLDS if x != fit_on][0]
+            best_w, best_f1 = None, -1
+            for w in (0.1, 0.2, 0.3, 0.5):
+                p = {fit_on: (1 - w) * lgb_p[fit_on] + w * fp[(fam, fit_on)]}
+                pred, _, _ = v3_rule(ctx, p[fit_on], fit_on, labels)
+                f = C.f1w(ctx.snaps[fit_on][1].Opportunity.to_numpy(), pred)
+                if f > best_f1:
+                    best_w, best_f1 = w, f
+            picks[other] = best_w
+        agree = len(set(picks.values())) == 1
+        blend = {v: (1 - picks[v]) * lgb_p[v] + picks[v] * fp[(fam, v)] for v in V.FOLDS}
+        rows.append(l4_eval(f'lgbm + {fam} blend [3s]', ctx, blend, labels,
+                            note='w=' + '/'.join(str(picks[v]) for v in V.FOLDS)
+                                 + ('  AGREE' if agree else '  DISAGREE')))
+    save('l2', dict(rows=rows, corr=corr))
+    return rows
+
+
+# --- L3 finer target ----------------------------------------------------------
+
+def fine_labels(y, cfg):
+    """type x winning_source_category, which the 17-class target collapses."""
+    opp = y.Opportunity.to_numpy()
+    cat = y.winning_source_category.fillna('').to_numpy()
+    out = []
+    for o, c in zip(opp, cat):
+        if o.startswith('New category adoption'):
+            out.append('A:' + c)
+        elif o.startswith('Existing-category growth'):
+            out.append('G:' + c)
+        else:
+            out.append(o)
+    return np.array(out, dtype=object)
+
+
+def fine_to_coarse(fine, cfg, labels):
+    m = cfg['category_mapping']
+    out = {}
+    for f in fine:
+        if f.startswith('A:'):
+            out[f] = 'New category adoption: ' + m[f[2:]]['New category adoption']
+        elif f.startswith('G:'):
+            out[f] = 'Existing-category growth: ' + m[f[2:]]['Existing-category growth']
+        else:
+            out[f] = f
+    return out
+
+
+def track_l3(ctx, args):
+    labels, cfg = ctx.labels, ctx.cfg
+    extra, folds = lag_folds(ctx)
+    lgb_p = {v: pd.read_parquet(f'preds/proba_lags20_{v}.parquet')
+             .set_index('ID')[labels].to_numpy() for v in V.FOLDS}
+    out = {}
+    for v in V.FOLDS:
+        yf = fine_labels(folds[v]['ytr'], cfg)
+        fine = sorted(set(yf))
+        fmap = fine_to_coarse(fine, cfg, labels)
+        code = {f: i for i, f in enumerate(fine)}
+        t0 = time.time()
+        pr = W.bag_clf(folds[v]['Xtr'], np.array([code[x] for x in yf]),
+                       folds[v]['Xva'], fine, seeds=SCREEN).to_numpy()
+        # sum fine probabilities into the 17 submitted classes
+        agg = np.zeros((pr.shape[0], len(labels)))
+        for i, f in enumerate(fine):
+            agg[:, labels.index(fmap[f])] += pr[:, i]
+        out[v] = agg
+        print(f'  {v}: {len(fine)} fine classes -> 17 ({time.time() - t0:.0f}s)',
+              flush=True)
+    print('\n--- L3 finer target, probabilities summed back to 17 ---')
+    l_header()
+    rows = [l4_eval('v4_lags LightGBM [20s, incumbent]', ctx, lgb_p, labels),
+            l4_eval('fine target summed back [5s]', ctx, out, labels)]
+    save('l3', dict(rows=rows))
+    return rows
+
+
+# --- L4 one-vs-rest -----------------------------------------------------------
+
+def track_l4(ctx, args):
+    labels = ctx.labels
+    extra, folds = lag_folds(ctx)
+    lgb_p = {v: pd.read_parquet(f'preds/proba_lags20_{v}.parquet')
+             .set_index('ID')[labels].to_numpy() for v in V.FOLDS}
+    groups = BIG4 + ['__adopt__']
+    plain, reweighted = {}, {}
+    for v in V.FOLDS:
+        D = folds[v]
+        yl = D['ytr'].Opportunity.to_numpy()
+        probs = []
+        for g in groups:
+            yb = (np.array([l.startswith('New category adoption') for l in yl])
+                  if g == '__adopt__' else (yl == g)).astype(int)
+            t0 = time.time()
+            probs.append(W.bag_binary(D['Xtr'], yb, D['Xva'], seeds=SCREEN))
+            print(f'  {v} {g} ({time.time() - t0:.0f}s)', flush=True)
+        P = np.vstack(probs).T
+        P = P / np.clip(P.sum(axis=1, keepdims=True), 1e-9, None)
+        # plain: adoption mass goes to the multiclass model's best adoption class
+        ad = [labels.index(l) for l in labels if l.startswith('New category adoption')]
+        A = np.zeros((len(P), len(labels)))
+        for k, g in enumerate(BIG4):
+            A[:, labels.index(g)] = P[:, k]
+        best_ad = np.array(ad)[lgb_p[v][:, ad].argmax(axis=1)]
+        A[np.arange(len(P)), best_ad] += P[:, 4]
+        plain[v] = A
+        # reweighted: keep the multiclass within-group shares, replace the group
+        # marginals with the one-vs-rest estimates
+        B = lgb_p[v].copy()
+        rest = [j for j in range(len(labels)) if j not in
+                [labels.index(g) for g in BIG4] + ad]
+        for k, g in enumerate(BIG4):
+            j = labels.index(g)
+            B[:, j] = P[:, k]
+        share = lgb_p[v][:, ad] / np.clip(lgb_p[v][:, ad].sum(axis=1, keepdims=True),
+                                          1e-9, None)
+        B[:, ad] = share * P[:, 4][:, None]
+        B[:, rest] = lgb_p[v][:, rest] * 1e-6
+        reweighted[v] = B / np.clip(B.sum(axis=1, keepdims=True), 1e-9, None)
+    print('\n--- L4 one-vs-rest against the single multiclass model ---')
+    l_header()
+    rows = [l4_eval('v4_lags multiclass [20s, incumbent]', ctx, lgb_p, labels),
+            l4_eval('one-vs-rest, 5 groups [5s]', ctx, plain, labels,
+                    note='minor growth classes unreachable'),
+            l4_eval('one-vs-rest group marginals [5s]', ctx, reweighted, labels,
+                    note='multiclass within-group shares kept')]
+    save('l4', dict(rows=rows))
+    return rows
+
+
+TRACKS['l2'] = track_l2
+TRACKS['l3'] = track_l3
+TRACKS['l4'] = track_l4
+
+
+# --- L5 regression-informed features for the classifier -----------------------
+
+REG_FEAT_SEEDS = (42,)   # these are FEATURES, so one seed is enough; the
+                         # consuming classifier is bagged normally
+
+
+def reg_oof_features(ctx, cuts):
+    """Hurdle outputs at each cutoff, built strictly forward in time: the model
+    that produces the features at cutoff c is trained only on snapshots whose
+    3-month outcome window ends on or before c. The earliest cutoffs have no
+    usable training data, so their columns are NaN and LightGBM treats them as
+    missing.
+
+    Eight columns: the gate P(y>0) and the hurdle's z-space prediction for each
+    target, the prediction converted back to raw units, and the raw prediction
+    as a ratio to the customer's previous-quarter actual.
+    """
+    p = Path('preds/reg_oof.parquet')
+    have = {}
+    if p.exists():
+        t = pd.read_parquet(p)
+        for c, g in t.groupby('_cutoff', observed=True):
+            have[str(c)] = g.drop(columns=['_cutoff']).set_index('ID')
+    need = [c for c in cuts if c not in have]
+    for c in need:
+        X = T.select(ctx.snaps[c][0], ('base',), ctx.bc)
+        past = M.trainable_for(ctx.monthly, c)
+        if not past:
+            have[c] = pd.DataFrame(np.nan, index=X.index, columns=[
+                'ro_gate_fuel', 'ro_z_fuel', 'ro_raw_fuel', 'ro_ratio_fuel',
+                'ro_gate_nf', 'ro_z_nf', 'ro_raw_nf', 'ro_ratio_nf'])
+            print(f'  reg-oof {c}: no earlier snapshots -> NaN', flush=True)
+            continue
+        t0 = time.time()
+        Xp = pd.concat([T.select(ctx.snaps[k][0], ('base',), ctx.bc) for k in past])
+        yp = pd.concat([ctx.snaps[k][1] for k in past])
+        cols = {}
+        for tgt, tag, prev in (('CLV_fuel', 'fuel', 'q1_fuel_l'),
+                               ('CLV_nonfuel', 'nf', 'q1_nf_r')):
+            y = yp[tgt]
+            pos = (y.to_numpy() > 0)
+            gate = M.bag_binary(Xp, pos.astype(int), X, REG_FEAT_SEEDS)
+            mag = M.bag_reg(Xp[pos], y[pos], X, REG_FEAT_SEEDS)
+            z = np.clip(gate * mag, 0, None)
+            raw = np.expm1(z * ctx.cfg['normalization'][tgt])
+            cols[f'ro_gate_{tag}'] = gate
+            cols[f'ro_z_{tag}'] = z
+            cols[f'ro_raw_{tag}'] = raw
+            cols[f'ro_ratio_{tag}'] = raw / (X[prev].to_numpy() + 1.0)
+        have[c] = pd.DataFrame(cols, index=X.index)
+        print(f'  reg-oof {c}: trained on {len(past)} earlier snapshots, '
+              f'{len(Xp)} rows ({time.time() - t0:.0f}s)', flush=True)
+    if need:
+        pd.concat([have[c].assign(_cutoff=c) for c in sorted(have)])           .rename_axis('ID').reset_index().to_parquet(p, index=False)
+    return {c: have[c] for c in cuts}
+
+
+def track_l5(ctx, args):
+    """Regression-informed features on top of the lag features. This is the only
+    remaining L variant that adds information rather than restructuring the
+    label problem, and L1 established that adding information is the one thing
+    that has moved the classifier."""
+    labels = ctx.labels
+    cuts = sorted(set(ctx.monthly + list(V.FOLDS) + [W.TEST_CUTOFF]))
+    lags = lag_extra(ctx, cuts)
+    ro = reg_oof_features(ctx, cuts)
+    merged = {c: lags[c].join(ro[c]) for c in cuts}
+    cov = {v: float(ro[v].notna().all(axis=1).mean()) for v in V.FOLDS}
+    tr_cov = {}
+    for v in V.FOLDS:
+        past = M.trainable_for(ctx.monthly, v)
+        n = sum(len(ro[c]) for c in past)
+        ok = sum(int(ro[c].notna().all(axis=1).sum()) for c in past)
+        tr_cov[v] = ok / max(n, 1)
+    print('\n  coverage of the regression-informed columns:')
+    for v in V.FOLDS:
+        print(f'    fold {v}: {tr_cov[v]:.0%} of training rows, {cov[v]:.0%} of '
+              f'validation rows')
+
+    lgb_p = {v: pd.read_parquet(f'preds/proba_lags20_{v}.parquet')
+             .set_index('ID')[labels].to_numpy() for v in V.FOLDS}
+    print('\n--- L5 regression-informed features on top of lags ---')
+    l_header()
+    rows = [l4_eval('v4_lags [20s, incumbent]', ctx, lgb_p, labels)]
+    t0 = time.time()
+    pr = {}
+    for v in V.FOLDS:
+        D = ctx.fold(v, mode='monthly', extra=merged)
+        pr[v] = W.bag_clf(D['Xtr'], D['ycode'], D['Xva'], labels,
+                          seeds=SCREEN).to_numpy()
+    rows.append(l4_eval('+ regression-informed [5s]', ctx, pr, labels,
+                        note=f'({time.time() - t0:.0f}s)'))
+    if rows[-1]['score'] > rows[0]['score']:
+        print('\n  beat the incumbent at 5 seeds; confirming at 20')
+        l_header()
+        pr20 = {}
+        for v in V.FOLDS:
+            D = ctx.fold(v, mode='monthly', extra=merged)
+            pr20[v] = W.bag_clf(D['Xtr'], D['ycode'], D['Xva'], labels,
+                                seeds=CONFIRM).to_numpy()
+            pd.DataFrame(pr20[v], index=D['Xva'].index, columns=labels)               .rename_axis('ID').reset_index()               .to_parquet(f'preds/proba_lagsreg20_{v}.parquet', index=False)
+        rows.append(l4_eval('+ regression-informed [20s]', ctx, pr20, labels))
+    save('l5', dict(rows=rows, coverage=cov, train_coverage=tr_cov))
+    return rows
+
+
+TRACKS['l5'] = track_l5
+
+
+
+
 
 # --- diagnostics --------------------------------------------------------------
 

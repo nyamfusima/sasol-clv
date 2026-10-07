@@ -1258,6 +1258,91 @@ regressions means the two candidates differ in exactly one component, which also
 makes them a cleaner pair for the two final picks than two variants differing in
 several places.
 
+### Track L complete -- nothing passes on top of v4_lags (0.29119)
+
+| variant | F1 fold 1 | F1 fold 2 | mean F1 | delta score |
+| --- | --- | --- | --- | --- |
+| v4_lags (incumbent) | 0.5095 | 0.5169 | 0.5132 | - |
+| L2 lgbm + mlp blend | 0.5133 | 0.5158 | 0.5146 | +0.00055 (weights disagree) |
+| L2 lgbm + xgboost blend | 0.5105 | 0.5176 | 0.5141 | +0.00035 (weights disagree) |
+| L2 lgbm + extratrees blend | 0.5105 | 0.5161 | 0.5133 | +0.00003 (weights agree) |
+| L2 lgbm + catboost blend | 0.5111 | 0.5151 | 0.5131 | -0.00003 |
+| L2 lgbm + logistic blend | 0.5132 | 0.5124 | 0.5128 | -0.00018 |
+| L5 regression-informed features | 0.5082 | 0.5151 | 0.5117 | -0.00061 |
+| L2 catboost alone | 0.5058 | 0.5119 | 0.5089 | -0.00173 |
+| L4 one-vs-rest, group marginals | 0.5059 | 0.5060 | 0.5060 | -0.00289 |
+| L4 one-vs-rest, 5 groups | 0.5048 | 0.5034 | 0.5041 | -0.00363 |
+| L2 mlp alone | 0.5003 | 0.5022 | 0.5013 | -0.00478 |
+| L2 extratrees alone | 0.4989 | 0.5000 | 0.4995 | -0.00549 |
+| L2 logistic alone | 0.4806 | 0.4962 | 0.4884 | -0.00991 |
+| L3 fine target, 48 classes | 0.4423 | 0.4220 | 0.4321 | -0.03243 |
+
+#### L2: you can have a different model or a good model, not both
+Pairwise probability correlation with the lag-feature LightGBM, against each
+family's standalone score:
+
+| family | corr, all cells | corr, 4 large classes | alone |
+| --- | --- | --- | --- |
+| logistic | 0.9272 | 0.8649 | -0.00991 |
+| mlp | 0.9386 | 0.8908 | -0.00478 |
+| extratrees | 0.9755 | 0.9382 | -0.00549 |
+| catboost | 0.9858 | 0.9656 | -0.00173 |
+| xgboost | 0.9974 | 0.9939 | +0.00001 |
+
+The relationship is monotone and unhelpful: the only family that matches
+LightGBM's accuracy (XGBoost, F1 0.5132 against 0.5132) is at correlation 0.9939
+and so has nothing to contribute, while every decorrelated family is materially
+worse. A useful blend needs a partner that is both decorrelated and comparably
+accurate, and on this problem no family is. The best blend is lgbm+mlp at
++0.00055, using the second-most-different family, but mlp's standalone deficit
+forces a small weight and the cross-fold weights disagree (0.1 against 0.3).
+Only extratrees' weights agreed, for +0.00003.
+
+#### L3 and L4 bracket the label structure, and 17 classes is the optimum
+| change to the label structure | delta score |
+| --- | --- |
+| more resolution (48 fine classes) | -0.03243 |
+| same resolution, independent binaries | -0.00289 |
+| less resolution (5 groups) | -0.00363 |
+| single 17-class softmax | best |
+
+L3's collapse (-0.081 mean F1) is sample starvation: 48 classes from the same
+~50k rows, when the adoption sub-classes were already down to 10-60 examples at
+17. So the 17-class target is not hiding useful distinctions -- it is already at
+or past the resolution the data supports, consistent with block C finding the
+rare classes unmonetisable even with an oracle.
+
+L4 answers its own question cleanly: five binary models estimate the group
+marginals WORSE than one softmax. Preserving the within-group resolution helps
+(+0.0019 over the plain version) but both lose to the joint model, because a
+softmax shares statistical strength across classes and enforces sum-to-one by
+construction, where independent binaries estimate in isolation and then have to
+recover coherence by normalising.
+
+#### L5 with good coverage, so a genuine null
+Coverage was healthy -- 76% and 83% of training rows, 100% of validation rows --
+unlike block E, whose analogous features were missing from all of fold 1's
+training snapshots. So -0.00061 on both folds is a real null, and the reason is
+that these are not new information: **the hurdle is built from the same base
+features the classifier already has**, so its gate and magnitude outputs are
+deterministic functions of columns already in the matrix. Feeding them back adds
+a noisy one-seed summary of what is already present.
+
+### What now explains every classifier result in the project
+| change | new information? | outcome |
+| --- | --- | --- |
+| L1 lag series | yes, monthly resolution absent from quarterly aggregates | +0.00139 |
+| L5 regression-informed | no, derived from existing features | -0.00061 |
+| block F, five groups | side-information, redundant with tenure or high-cardinality noise | -0.0012 to -0.0046 |
+| L2 family swaps and blends | no | -0.0099 to +0.00055 |
+| L3, L4 restructuring | no | -0.0324 to -0.0029 |
+| sweep 1 features a-c, e | no | -0.0037 to -0.115 |
+
+**The classifier improves only when given information it genuinely lacks.**
+Restructuring the label space, swapping model families, and re-deriving features
+it can already compute have now failed 14 times between them. That is the case
+for sweep 6 testing new information and nothing else.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
