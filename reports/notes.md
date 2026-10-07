@@ -1233,6 +1233,31 @@ Four kept changes in the project: seed bagging (+0.00178), hurdle regressions
 (+0.00212), partial prior matching (+0.00262 over Fuel x1.25, itself +0.00115
 over bag20), and the lag series (+0.00190). Total 0.28164 -> 0.29119, +0.00955.
 
+### submission_v4_hybrid.csv -- lag labels with v3's regressions
+Opportunity from `submission_v4_lags.csv`, CLV columns from `submission_v3.csv`
+(bag20 hurdle without lag features). Pure composition of two existing files, so
+no refit was needed, and its configuration is exactly what the L1 20-seed row
+already measured: the lag classifier under the alpha=0.5 rule with v3's
+regressions.
+
+| stack | score | mean F1 | vs v4_lags |
+| --- | --- | --- | --- |
+| v3 | 0.28929 | 0.5098 | -0.00190 |
+| **v4_hybrid** | **0.29068** | 0.5132 | -0.00051 |
+| v4_lags | 0.29119 | 0.5132 | - |
+
+Provenance verified after writing: Opportunity bit-identical to v4_lags, CLV
+columns bit-identical to v3, Opportunity differing from v3 on 6.94% of customers.
+
+The hybrid is dominated on validation -- it gives up the +0.00051 the lag
+features contribute to the regressions while keeping their +0.00139 on the
+label. It is the conservative option: the lag regressors are a change to a
+component that has already been through four sweeps of tuning, whereas the lag
+classifier is the first thing in the project to move F1 at all. Keeping v3's
+regressions means the two candidates differ in exactly one component, which also
+makes them a cleaner pair for the two final picks than two variants differing in
+several places.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
