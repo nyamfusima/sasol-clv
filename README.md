@@ -90,19 +90,38 @@ scored:
 Fold 2 is the baseline's original split, so its numbers are directly comparable
 with `src/baseline.py`.
 
-### Scoring formula — INFERRED, local use only
+### Scoring formula — inferred constants, confirmed mechanism
 
 ```
 Score = 0.4*F1 + 0.3*(1 - RMSE_fuel/0.74) + 0.3*(1 - RMSE_nonfuel/0.816)
 ```
 
-The official Info page gives only the weights (0.3 / 0.3 / 0.4). The
-normalisers **0.74** and **0.816** were not published: they were recovered by
-fitting four public leaderboard rows, which they reproduce to nine decimal
-places. This formula is used for **local model selection only** — never as a
-claim about the official metric. Decisions are additionally reported per
-component (F1, RMSE fuel, RMSE non-fuel) in `reports/notes.md` so they do not
-depend on the inferred normalisers being exactly right.
+**The mechanism is confirmed.** Zindi staff confirmed that the RMSE components
+are normalised, in the competition discussion *"Clarification Request:
+Leaderboard Public Score Discrepancy"* (25 Sep 2026), and the Info page now
+reads "normalised RMSE … normalised Weighted F1". The weights (0.3 / 0.3 / 0.4)
+are official.
+
+**The two constants are still inferred.** 0.74 and 0.816 have not been
+officially published. Three things support them:
+
+- they were recovered here by fitting four public leaderboard rows, which they
+  reproduce to nine decimal places;
+- another participant in that same thread independently backed out the same two
+  values;
+- under Zindi's multi-metric policy the normalisers are typically the starter
+  notebook's scores, which is consistent with the magnitudes.
+
+That is strong but not authoritative, so the formula is used for **local model
+selection only** and never as a claim about the official metric. Every decision
+is additionally reported per component (F1, RMSE fuel, RMSE non-fuel) in
+`reports/notes.md`, so no conclusion in this repo depends on the two constants
+being exactly right. Blocks H and I are the clearest cases: they hold the
+regressions fixed, which makes the combined score an exact affine function of
+weighted F1 — measured on block I's 20 variants, `score = 0.4*meanF1 + 0.085393`
+to a residual of 1.1e-16 — so the ranking and every verdict there are identical
+whether read on raw F1 or on the score, and the two constants cannot influence
+them at all.
 
 ## Compliance
 

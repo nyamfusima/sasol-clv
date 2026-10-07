@@ -107,6 +107,17 @@ Fuel growth 0.45 -> 0.60 would be worth about +0.040.
 Higher is better. `src/validate.py` exposes `combined()` and `score_row()`; every
 decision from here uses that single number.
 
+Provenance (updated 7 Oct): the normalisation **mechanism** is confirmed -- Zindi
+staff confirmed it in the discussion "Clarification Request: Leaderboard Public
+Score Discrepancy" (25 Sep 2026) and the Info page now reads "normalised RMSE ...
+normalised Weighted F1". The weights 0.3 / 0.3 / 0.4 are official. The two
+**constants** 0.74 and 0.816 remain unpublished: they were backed out here from
+four public leaderboard rows (nine-decimal agreement), another participant in
+that thread independently recovered the same values, and Zindi's multi-metric
+policy makes the starter notebook's RMSE scores the likely source. Label:
+inferred constants, confirmed mechanism. All verdicts are also reported per
+component so none of them rests on the constants.
+
 Gradients: +0.4 per unit F1, -0.4054 per unit RMSE_fuel, -0.3676 per unit
 RMSE_nonfuel. A 0.005 RMSE drop is worth about as much as a 0.005 F1 gain, so the
 three GO bars (+0.005 F1, -0.005 on each RMSE) are worth +0.00200, +0.00203 and
