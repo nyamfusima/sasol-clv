@@ -296,7 +296,7 @@ def write_submission(cfg, labels, cats, spec, train_path, test_path, baseline_cs
         pred = argmax_labels(p, labels)
     out = pd.Series(pred, index=Xte.index, name='Opportunity')
 
-    base = pd.read_csv(baseline_csv, dtype={'ID': str})
+    base = pd.read_csv(baseline_csv, dtype={'ID': str}, float_precision='round_trip')
     test_ids = pd.read_csv(test_path, dtype=str).ID
     sub = base.set_index('ID').reindex(test_ids)
     assert sub[['CLV_fuel', 'CLV_nonfuel']].notna().all().all(), 'baseline is missing test IDs'
@@ -311,7 +311,7 @@ def write_submission(cfg, labels, cats, spec, train_path, test_path, baseline_cs
     assert sub.index.equals(pd.Index(test_ids)), 'IDs do not match data/test.csv'
     assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
     Path(out_csv).parent.mkdir(exist_ok=True)
-    sub.rename_axis('ID').reset_index().to_csv(out_csv, index=False)
+    sub.rename_axis('ID').reset_index().to_csv(out_csv, index=False, float_format='%.17g')
     print(f'\nWrote {out_csv}: {len(sub)} rows, IDs match data/test.csv, '
           f'all labels in config, CLV columns untouched')
     print(f'changed Opportunity for {(before != sub.Opportunity.to_numpy()).sum()} of {len(sub)} customers')

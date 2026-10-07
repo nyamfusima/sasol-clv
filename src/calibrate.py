@@ -84,6 +84,18 @@ def fmt_mix(v, labels):
     return ' '.join(f'{l.split(": ")[-1][:9]} {v[labels.index(l)]:.3f}' for l in BIG)
 
 
+def _verify_clv_matches(out, bag_path):
+    """Re-read both files and confirm the CLV columns are bit-identical. Reading
+    with float_precision='round_trip' matters: pandas' default CSV float parser is
+    not correctly rounded and shifts values by 1 ULP per read/rewrite cycle."""
+    import pandas as pd
+    rd = lambda p: pd.read_csv(p, dtype={'ID': str}, float_precision='round_trip')
+    a, b = rd(out), rd(bag_path)
+    assert a.ID.equals(b.ID), 'ID order differs'
+    assert a[['CLV_fuel', 'CLV_nonfuel']].equals(b[['CLV_fuel', 'CLV_nonfuel']]),         'CLV columns are not bit-identical to the source'
+    print(f'  verified: {out} CLV columns bit-identical to {bag_path}')
+
+
 def main():
     ap_ = argparse.ArgumentParser()
     ap_.add_argument('--config', default='src/label_config.json')
@@ -273,17 +285,18 @@ def main():
         print(f'    full-match got {fmt_mix(mix(ap(pte0, w_raw, labels), labels), labels)}')
     else:
         w = np.array(best['w'])
-    bag = pd.read_csv(a.bag20, dtype={'ID': str}).set_index('ID')
+    bag = pd.read_csv(a.bag20, dtype={'ID': str}, float_precision='round_trip').set_index('ID')
     pte = Pte.reindex(test_ids)[labels].to_numpy()
     sub = bag[['CLV_fuel', 'CLV_nonfuel']].reindex(test_ids).copy()
     sub['Opportunity'] = ap(pte, w, labels)
     assert len(sub) == 5488 and sub.index.equals(pd.Index(test_ids))
     assert sub.notna().all().all() and not set(sub.Opportunity) - set(labels)
     assert (sub[['CLV_fuel', 'CLV_nonfuel']] >= 0).all().all()
-    assert sub[['CLV_fuel', 'CLV_nonfuel']].equals(
-        bag[['CLV_fuel', 'CLV_nonfuel']].reindex(test_ids)), 'CLV drifted from bag20'
+    # (checked against a fresh read of both files after writing, below -- comparing
+    # `sub` to the frame it was copied from here would be vacuous)
     assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity']
-    sub.rename_axis('ID').reset_index().to_csv(a.out, index=False)
+    sub.rename_axis('ID').reset_index().to_csv(a.out, index=False, float_format='%.17g')
+    _verify_clv_matches(a.out, a.bag20)
     print(f'wrote {a.out}: 5488 rows, IDs match, labels in config, CLV >= 0 and '
           f'identical to bag20')
     print('  predicted mix: ' + fmt_mix(mix(sub.Opportunity.to_numpy(), labels), labels))

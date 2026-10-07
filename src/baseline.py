@@ -58,7 +58,7 @@ def main():
     test_ids = pd.read_csv(a.test, dtype=str).ID
     sub = fit_predict(Xall, yall, Xte, labels).reindex(test_ids)
     assert sub.notna().all().all(), 'some test customers have no features'
-    sub.rename_axis('ID').reset_index().to_csv(a.out, index=False)
+    sub.rename_axis('ID').reset_index().to_csv(a.out, index=False, float_format='%.17g')
     print(f'Wrote {a.out}: {len(sub)} rows'); print(sub.Opportunity.value_counts(normalize=True).round(3).head(6).to_string())
 
 

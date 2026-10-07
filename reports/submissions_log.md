@@ -52,6 +52,17 @@ No submission was produced on 5 Oct: the label v2 sweep (variants a-f) peaked at
 a held-out mean F1 of 0.5011 vs the baseline's 0.4998, which fails the +0.010 bar,
 so `submission_baseline_v1.csv` remains the live entry. Full table in `notes.md`.
 
+All files are written with `float_format='%.17g'` and must be read with
+`float_precision='round_trip'`: pandas' default CSV float parser is not
+correctly rounded and shifts values by 1 ULP on every read-rewrite cycle. Every
+file here is read-write byte-identical, and the bag20-derived files
+(`submission_v2_prior.csv`, `submission_v3.csv`) have CLV columns bit-identical
+to `submission_v2_bag20.csv`.
+
+Block I (projected target mixes) produced no new submission: the projections are
+more accurate targets but all score below the stale target, so `submission_v3.csv`
+remains the best candidate at 0.28929.
+
 ## Label v2 sweep (validation, two folds -- not submitted)
 | Variant | Fold 2025-06 | Fold 2025-09 | Mean | Kept |
 | --- | --- | --- | --- | --- |

@@ -186,7 +186,7 @@ def main():
     assert (sub[['CLV_fuel', 'CLV_nonfuel']] >= 0).all().all(), 'negative CLV'
     assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
     Path(a.out).parent.mkdir(exist_ok=True)
-    sub.rename_axis('ID').reset_index().to_csv(a.out, index=False)
+    sub.rename_axis('ID').reset_index().to_csv(a.out, index=False, float_format='%.17g')
     print(f'wrote {a.out}: {len(sub)} rows, IDs match, all labels in config, '
           f'CLV min {sub[list(TARGETS)].min().min():.4f}')
     print(f'total runtime {time.time() - t0:.0f}s')

@@ -828,6 +828,121 @@ v3 is +0.00376 over v2 and +0.00262 over v2_prior. Every gain in the project now
 comes from three places: seed bagging, the hurdle regressions, and decision
 calibration. No feature, model or structural change ever helped.
 
+## Block I -- better targets for partial prior matching (7 Oct). Nothing passes.
+
+Incumbent: H3, stale target, 4 large classes, alpha 0.5, score 0.28929.
+
+### I1 projected target mixes: they ARE more accurate
+Sum of absolute error against the TRUE fold mix over the four large classes:
+
+| method | fold 2025-06 | fold 2025-09 |
+| --- | --- | --- |
+| stale (last observed) | 0.106 | 0.053 |
+| linear over last 4 | 0.123 | 0.079 |
+| linear over last 6 | 0.075 | 0.055 |
+| last + mean QoQ change | **0.044** | 0.059 |
+| damped (half the linear step) | 0.082 | **0.050** |
+
+On fold 1 the quarter-on-quarter projection cuts target error by 58%
+(0.106 -> 0.044). The projections do what they were meant to do.
+
+### I2 ...and every one of them scores WORSE
+Best alpha per target, against the incumbent 0.28929:
+
+| target | best alpha | mean F1 | score | delta | cross-fold alpha |
+| --- | --- | --- | --- | --- | --- |
+| stale | 0.5 | 0.5098 | 0.28929 | - | 0.5 / 0.5 AGREE |
+| lin4 | 0.5 | 0.5079 | 0.28854 | -0.00075 | 0.5 / 0.5 AGREE |
+| lin6 | 0.75 | 0.5085 | 0.28877 | -0.00052 | 0.75 / 0.75 AGREE |
+| qoq | 0.75 | 0.5078 | 0.28852 | -0.00078 | 0.75 / 0.5 DISAGREE |
+| damped | 0.75 | 0.5102 | 0.28946 | +0.00017 | 0.75 / 0.5 DISAGREE |
+
+All dropped. `damped` at alpha 0.75 is nominally +0.00017 but its cross-fold
+alpha disagreed (0.75 against 0.5), so it is not selectable, and the gain is an
+eighth of the bar in any case.
+
+**The alpha hypothesis is confirmed**: a better target does push the optimum
+toward 1.0 (stale picks 0.5; lin6, qoq and damped all pick 0.75). The mechanism
+behaves exactly as predicted. It just does not convert into F1.
+
+**What this settles.** Matching the true class mix is not why prior matching
+works. The stale target wins *despite* being the least accurate of the five, and
+the three most accurate targets all score below it. So alpha is not a staleness
+correction -- it is trading the model's ranking against its marginal, and the
+best trade sits well short of full matching no matter how good the target is.
+Improving the target is therefore the wrong axis; this line is closed.
+
+### I3 calibration before matching -- dropped
+A single global temperature is algebraically identical to alpha:
+
+    argmax_c p_c^(1/T) * w_c = argmax_c [(1/T) log p_c + log w_c]
+                             = argmax_c [log p_c + T log w_c] = argmax_c p_c * w_c^T
+
+so temperature T with weights w is exactly weights w**T, which is the alpha
+mechanism. Demonstrated rather than fitted: T=2.0 with alpha=0.5 gives F1
+0.4976 / 0.5046, identical to T=1.0 with alpha=1.0. There is nothing to gain
+here that the alpha grid has not already searched.
+
+Isotonic (one monotone map per class, fitted on an earlier fully observed
+snapshot) is genuinely different and all five variants are dropped, from -0.00138
+(lin6) to -0.00376 (lin4).
+
+### I4 distance to the external reference shares -- report only
+Computed after selection was frozen, and it corroborates the choice rather than
+contradicting it.
+
+| method | Stable | Inactivity | Fuel | sum abs err |
+| --- | --- | --- | --- | --- |
+| REFERENCE | 0.276 | 0.297 | 0.252 | - |
+| **stale** | 0.268 | 0.274 | 0.274 | **0.053** |
+| damped | 0.255 | 0.283 | 0.278 | 0.060 |
+| qoq | 0.238 | 0.312 | 0.262 | 0.062 |
+| lin6 | 0.236 | 0.300 | 0.275 | 0.066 |
+| lin4 | 0.243 | 0.292 | 0.282 | 0.068 |
+
+The stale target is the CLOSEST to the reference and every projection is
+further away: the drift did not continue linearly into the test quarter --
+reference Stable 0.276 is *above* the 2025-09 observation of 0.268, reversing
+the trend the projections extrapolated. Same failure mode as on validation.
+
+Caveats on these three numbers, which matter for how much weight they carry:
+- They describe the **public split only**, roughly 1,650 customers. Sampling
+  error at p=0.28 is about +/-0.011, so the 0.053-vs-0.060 gap is not decisive.
+- They were used for a distance report and nothing else. Selection ran on the
+  two folds and was frozen before I4 was computed, by construction in
+  `src/project_mix.py`. Letting them choose a variant would be fitting to the
+  public test set, which is the standard route to a public-to-private collapse.
+
+## The 1-ULP CSV issue -- the real cause was the READER, not the writer
+
+The requested fix was `float_format='%.17g'` on write. That was applied to all
+ten CSV writers (label_rules.py already had it), but **it was not the cause**.
+
+Writing was already correct: pandas' default `to_csv` emits
+`1.9039983171278114`, which is the exact shortest round-tripping text. The loss
+is in `read_csv`, whose default float parser is fast but not correctly rounded.
+Measured: writing a value and reading it back is inexact under
+`float_precision=None` **and** under `'high'`, and exact only under
+`'round_trip'`.
+
+So every read-then-rewrite of a submission shifted CLV values by 1 ULP. That is
+how `submission_v3.csv` and `submission_v2_prior.csv` came to differ from
+`submission_v2_bag20.csv` by 4.4e-16 despite being built by copying its columns.
+
+Fixed by adding `float_precision='round_trip'` to every submission reader in
+`src/`, and the two derived files were regenerated. All ten files in
+`submissions/` are now read-write byte-identical, and v3 and v2_prior have CLV
+columns bit-identical to bag20 (max difference exactly 0.0).
+
+Also replaced a vacuous assertion found while debugging this: the scripts
+asserted that the written frame's CLV equalled the frame it had just been copied
+from, which is trivially true and tested nothing. It is now a post-write check
+that re-reads both files from disk and compares.
+
+Numerically none of this matters at scoring precision -- 4.4e-16 on a value of
+1.9 cannot move an RMSE at four decimals. It matters for reproducibility claims:
+without it, "identical to bag20" was not true of the files on disk.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

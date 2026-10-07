@@ -948,7 +948,7 @@ def write_probes(ctx):
         sub['Opportunity'] = lab
         assert len(sub) == 5488 and sub.index.equals(pd.Index(test_ids))
         Path('submissions').mkdir(exist_ok=True)
-        sub.rename_axis('ID').reset_index().to_csv(f'submissions/{fname}', index=False)
+        sub.rename_axis('ID').reset_index().to_csv(f'submissions/{fname}', index=False, float_format='%.17g')
         print(f'  wrote submissions/{fname}: {len(sub)} rows, all Opportunity="{lab}"')
     print('  (diagnostic only -- not submitted)')
 
@@ -1043,7 +1043,7 @@ def build_v2(ctx, out='submissions/submission_v2.csv'):
     assert neg == 0, f'{neg} negative CLV values'
     assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
     Path(out).parent.mkdir(exist_ok=True)
-    sub.rename_axis('ID').reset_index().to_csv(out, index=False)
+    sub.rename_axis('ID').reset_index().to_csv(out, index=False, float_format='%.17g')
 
     r = stack_validation_score(stack)
     print(f'\nWrote {out}: {len(sub)} rows | IDs match data/test.csv | '
@@ -1186,7 +1186,7 @@ def build_v3(ctx, out='submissions/submission_v3.csv'):
     assert (sub[['CLV_fuel', 'CLV_nonfuel']] >= 0).all().all(), 'negative CLV'
     assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
     Path(out).parent.mkdir(exist_ok=True)
-    sub.rename_axis('ID').reset_index().to_csv(out, index=False)
+    sub.rename_axis('ID').reset_index().to_csv(out, index=False, float_format='%.17g')
     d = passed[0]
     r = Row('v3', d['f1'], d['rf'], d['rn'])
     print('')
@@ -1197,7 +1197,7 @@ def build_v3(ctx, out='submissions/submission_v3.csv'):
           f'(folds {r.score(0):.5f} / {r.score(1):.5f})')
     print(f'  v2 was 0.28553 | bagged reference 0.28342 | single-seed 0.28164')
     # the classifier must be unchanged from v2
-    v2 = pd.read_csv('submissions/submission_v2.csv', dtype={'ID': str})
+    v2 = pd.read_csv('submissions/submission_v2.csv', dtype={'ID': str}, float_precision='round_trip')
     same = (v2.set_index('ID').Opportunity.reindex(test_ids).to_numpy()
             == sub.Opportunity.to_numpy()).mean()
     print(f'  Opportunity identical to v2: {same:.4%}')
@@ -1316,7 +1316,7 @@ def write_g_probes(ctx):
     print(f'  test analog {a}, near {n}')
     Xte = T.select(ctx.snaps[TEST_CUTOFF][0], ('base',), ctx.bc)
     test_ids = pd.read_csv('data/test.csv', dtype=str).ID
-    v2 = pd.read_csv('submissions/submission_v2.csv', dtype={'ID': str}).set_index('ID')
+    v2 = pd.read_csv('submissions/submission_v2.csv', dtype={'ID': str}, float_precision='round_trip').set_index('ID')
     v2clv = v2[['CLV_fuel', 'CLV_nonfuel']].reindex(test_ids)
 
     jobs = [('submission_g_dec10.csv', cuts, 10),
@@ -1339,7 +1339,7 @@ def write_g_probes(ctx):
         assert sub[['CLV_fuel', 'CLV_nonfuel']].equals(v2clv), 'CLV drifted from v2'
         assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
         Path('submissions').mkdir(exist_ok=True)
-        sub.rename_axis('ID').reset_index().to_csv(f'submissions/{fname}', index=False)
+        sub.rename_axis('ID').reset_index().to_csv(f'submissions/{fname}', index=False, float_format='%.17g')
         agree = (v2.Opportunity.reindex(test_ids).to_numpy() == sub.Opportunity.to_numpy()).mean()
         print(f'    wrote submissions/{fname}: 5488 rows, CLV identical to v2, '
               f'Opportunity agrees with v2 on {agree:.2%}')

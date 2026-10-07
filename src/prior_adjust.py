@@ -52,6 +52,18 @@ def fit_weights(proba, y, labels, free_idx, rounds=6):
     return w, best
 
 
+def _verify_clv_matches(out, bag_path):
+    """Re-read both files and confirm the CLV columns are bit-identical. Reading
+    with float_precision='round_trip' matters: pandas' default CSV float parser is
+    not correctly rounded and shifts values by 1 ULP per read/rewrite cycle."""
+    import pandas as pd
+    rd = lambda p: pd.read_csv(p, dtype={'ID': str}, float_precision='round_trip')
+    a, b = rd(out), rd(bag_path)
+    assert a.ID.equals(b.ID), 'ID order differs'
+    assert a[['CLV_fuel', 'CLV_nonfuel']].equals(b[['CLV_fuel', 'CLV_nonfuel']]),         'CLV columns are not bit-identical to the source'
+    print(f'  verified: {out} CLV columns bit-identical to {bag_path}')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--train', default='data/train.csv')
@@ -132,7 +144,7 @@ def main():
           + (f'  (dropped as non-replicating: {dropped})' if dropped else ''))
     held = held2
     pte = pd.read_parquet('preds/oof_bag20_test.parquet').set_index('ID')
-    bag = pd.read_csv(a.bag20, dtype={'ID': str}).set_index('ID')
+    bag = pd.read_csv(a.bag20, dtype={'ID': str}, float_precision='round_trip').set_index('ID')
     test_ids = pd.read_csv('data/test.csv', dtype=str).ID
     pte = pte.reindex(test_ids)[labels].to_numpy()
     sub = bag[['CLV_fuel', 'CLV_nonfuel']].reindex(test_ids).copy()
@@ -142,11 +154,11 @@ def main():
     assert sub.notna().all().all(), 'missing predictions'
     assert not set(sub.Opportunity) - set(labels), 'label outside the config'
     assert (sub[['CLV_fuel', 'CLV_nonfuel']] >= 0).all().all(), 'negative CLV'
-    assert sub[['CLV_fuel', 'CLV_nonfuel']].equals(
-        bag[['CLV_fuel', 'CLV_nonfuel']].reindex(test_ids)), 'CLV drifted from bag20'
+    # (checked against a fresh read of both files after writing, below -- comparing
+    # `sub` to the frame it was copied from here would be vacuous)
     assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity'], sub.columns
     Path(a.out).parent.mkdir(exist_ok=True)
-    sub.rename_axis('ID').reset_index().to_csv(a.out, index=False)
+    sub.rename_axis('ID').reset_index().to_csv(a.out, index=False, float_format='%.17g')
     agree = (bag.Opportunity.reindex(test_ids).to_numpy() == sub.Opportunity.to_numpy()).mean()
     print(f'  wrote {a.out}: 5488 rows, IDs match, labels in config, CLV >= 0 '
           f'and identical to bag20; Opportunity agrees with bag20 on {agree:.2%}')

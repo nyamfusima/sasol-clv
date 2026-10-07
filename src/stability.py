@@ -161,7 +161,7 @@ def main():
     assert (sub[['CLV_fuel', 'CLV_nonfuel']] >= 0).all().all()
     assert list(sub.columns) == ['CLV_fuel', 'CLV_nonfuel', 'Opportunity']
     Path(a.out).parent.mkdir(exist_ok=True)
-    sub.rename_axis('ID').reset_index().to_csv(a.out, index=False)
+    sub.rename_axis('ID').reset_index().to_csv(a.out, index=False, float_format='%.17g')
     print(f'  wrote {a.out}: 5488 rows, IDs match, labels in config, CLV >= 0')
 
     OUT.parent.mkdir(exist_ok=True)
