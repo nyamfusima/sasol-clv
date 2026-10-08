@@ -1523,6 +1523,22 @@ differs only in the decision rule. Re-deriving alpha 0.5 from the cached test
 probabilities reproduces v4_hybrid's labels on 100.0000% of rows, confirming the
 composition path and the recipe agree.
 
+### Clean-clone verification (8 Oct)
+Fresh `git clone` from GitHub at commit 3e5588d, new venv from
+`requirements-lock.txt`, the three CSVs copied in, then
+`python src/make_submission.py --recipe v4_hybrid`.
+
+- output **byte-identical** to the committed `submission_v4_hybrid.csv`
+- validation reproduced exactly: F1 0.5095 / 0.5169, rmse 0.5969 / 0.5996 and
+  0.7350 / 0.7451, score 0.29068
+- measured runtime **4785 s (80 min)** with `time.monotonic()`
+
+That also corrects a number I had inferred rather than measured. The working-tree
+run reported 38,162 s because the system clock was adjusted mid-run; I estimated
+the true time at 53 min by subtracting the apparent jump, and the measured value
+is 80 min. The subtraction was the wrong instrument -- a monotonic measurement in
+a clean environment is the right one.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

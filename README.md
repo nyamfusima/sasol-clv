@@ -100,13 +100,24 @@ not correctly rounded and shifts values by 1 ULP on every read/rewrite cycle.
 | Packages | pinned in [`requirements-lock.txt`](requirements-lock.txt) |
 | OS | Windows 11 (26200) |
 | CPU | AMD Zen 3, 12 logical cores |
-| `--recipe v4_hybrid` | **about 53 min** end to end, including both validation folds |
+| `--recipe v4_hybrid` | **4785 s (80 min)** end to end, including both validation folds |
 | `--recipe v4_hybrid --skip-validation` | **1642 s (27 min)**, final fit only |
 | `--recipe v2` | 646 s (11 min) |
 
-Runtimes are measured with `time.monotonic()`. An earlier report of 38,162 s was
-an artefact of the system clock being adjusted mid-run while durations were
-computed from `time.time()`.
+Runtimes are measured with `time.monotonic()` and the v4_hybrid figure comes
+from the clean-clone run below. An earlier report of 38,162 s was an artefact of
+the system clock being adjusted mid-run while durations were computed from
+`time.time()`; the 53 min I first inferred by subtracting the estimated jump was
+also wrong, and 4785 s is the measured value.
+
+### Clean-clone test
+
+Verified end to end on 8 Oct 2026: a fresh `git clone` from GitHub, a new venv
+installed from `requirements-lock.txt`, the three CSVs copied into `data/`, then
+`python src/make_submission.py --recipe v4_hybrid`. The output is **byte-identical**
+to the committed `submissions/submission_v4_hybrid.csv` (`cmp`, clean), and the
+validation print reproduces exactly: F1 0.5095 / 0.5169, rmse_fuel 0.5969 /
+0.5996, rmse_nonfuel 0.7350 / 0.7451, score 0.29068.
 
 ## Method
 
