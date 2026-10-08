@@ -1646,6 +1646,54 @@ every component included. The two per-seed summation lineages are therefore
 indistinguishable to the metric, and the resubmission bought byte-provenance
 rather than score -- which is what was predicted before it was sent.
 
+## v4_simple submitted: three decision rules, one probability model (8 Oct)
+
+`submission_v4_simple.csv` (Zindi ID **8ii1ZeJp**) scored public **0.304851105**
+(F1 0.528141734, regressions byte-identical to the other two candidates). The
+pre-registered bands were: above 0.5353 F1 would replace the alpha 0.5 pick,
+0.515 to 0.5353 keeps the current pair. It landed mid-band at 0.5281, so the
+selection is unchanged -- A37bufRz and rjQUYHF9.
+
+| rule | validation F1 | public F1 | public score |
+| --- | --- | --- | --- |
+| simple, Fuel x1.25 | 0.5064 | 0.5281 | 0.304851105 |
+| prior matching, alpha 0.5 | 0.5132 | 0.5289 | 0.305152978 |
+| **prior matching, alpha 0.75** | **0.5139** | **0.5353** | **0.307714693** |
+
+**The rank order transferred exactly. The step sizes swapped.**
+
+| step | validation | public |
+| --- | --- | --- |
+| simple -> alpha 0.5 | **+0.0068** | +0.0008 |
+| alpha 0.5 -> alpha 0.75 | +0.0007 | **+0.0064** |
+
+Validation attributed almost the whole gain to adopting prior matching and
+treated the damping value as a detail; public reverses that attribution almost
+exactly. Validation chose the right family of rule and the wrong lever within it.
+
+The first step is additionally inside noise and flips sign with the probability
+model: Fuel x1.25 beat alpha 0.5 by 0.0008 on bag20 probabilities (0.5247 against
+0.5239) and lost to it by 0.0008 on the lag probabilities (0.5281 against
+0.5289). With SE about 0.011 for a 0.28 share on ~1,650 customers, that is a coin
+flip.
+
+### Correcting the transfer rule
+The rule recorded earlier -- simple constants and structural changes transfer,
+fitted procedures and sub-0.001 refinements do not -- rested mainly on one
+comparison (v2_prior -> v3, +0.00262 validation against -0.0004 public). Three
+rules on one probability model show that was too strong. The accurate statement:
+the machinery of prior matching is worth about nothing over a single constant
+(+/-0.0008, sign varying), while one scalar inside it is worth +0.0064; and
+validation mis-ranked those two by an order of magnitude each way. Validation was
+trustworthy for picking the family and untrustworthy for tuning inside it, which
+is precisely why alpha needed a pre-registered third reading.
+
+This also means the hedge did its job without being used. v4_simple was carried
+in case fitted rules failed to transfer; it showed instead that the fitted
+machinery is neutral rather than harmful, and that the parameter inside it is
+where the value sits. Keeping both alpha values as the picks remains the right
+call on that evidence.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

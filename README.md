@@ -14,7 +14,7 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | v4_lags — + lag series on all three models | 0.29119 | 0.3045 | submitted, not selected |
 | v4_hybrid — lag classifier, v3 regressions, α 0.5 | 0.29068 | 0.3052 | **selected**, rank 49 |
 | **v4_alpha075 — same, α 0.75** | 0.29095\* | **0.3077** | **selected**, rank 37 |
-| v4_simple — lag classifier, Fuel ×1.25 rule | 0.28796 | not submitted | hedge |
+| v4_simple — lag classifier, Fuel ×1.25 rule | 0.28796 | 0.3049 | submitted, not selected |
 
 Validation is the mean of two time-based folds; see
 [Validation protocol](#validation-protocol).
@@ -42,15 +42,30 @@ with its measured public delta gives a sharper rule than "labels matter":
 | lag series, all three models | +0.00190 | **+0.0014** | +0.0050 |
 | R1 regression bundle (diagnostic) | +0.00086 | **−0.0009** | 0.0000 |
 
-**Simple constants and structural changes held up; fitted procedures and
-sub-0.001 refinements did not.** A single global weight both folds agreed on
-(Fuel ×1.25) nearly tripled on public. A structural model change (the hurdle)
-transferred. But partial prior matching — an IPF procedure re-estimated per
-dataset with its damping chosen cross-fold — went from +0.00262 on validation to
-−0.0004 on public, and every regression refinement below 0.001 either vanished or
-reversed. That is why the primary pick is `v4_hybrid`: it keeps the lag
-classifier's label gain and drops the lag regressors, whose +0.0012/+0.0003 RMSE
-damage on public was invisible to validation.
+**Structural changes held up; regression refinements below 0.001 did not.** A
+single global weight both folds agreed on (Fuel ×1.25) nearly tripled on public,
+and the hurdle — a structural model change — transferred. But every regression
+refinement under 0.001 either vanished or reversed, which is why the selected
+picks drop the lag regressors: their +0.0012/+0.0003 public RMSE damage was
+invisible to validation.
+
+**On the decision rule, validation chose the right family and the wrong lever.**
+Three rules measured on one set of probabilities, with byte-identical
+regressions:
+
+| rule | validation F1 | public F1 | public score |
+| --- | --- | --- | --- |
+| simple, Fuel ×1.25 | 0.5064 | 0.5281 | 0.304851 |
+| prior matching, α 0.5 | 0.5132 | 0.5289 | 0.305153 |
+| **prior matching, α 0.75** | **0.5139** | **0.5353** | **0.307715** |
+
+The rank order transferred exactly, but the step sizes swapped: validation put
++0.0068 on adopting prior matching and +0.0007 on the damping value, while public
+puts +0.0008 and +0.0064. The first step is inside noise and even changes sign
+with the probability model. So the IPF machinery is worth about nothing over a
+single constant, while the one scalar inside it is the largest decision-rule
+effect in the project — and validation mis-ranked the two by an order of
+magnitude each way.
 
 Full evidence for every variant, kept or dropped, is in
 [`reports/notes.md`](reports/notes.md); every file and score is in

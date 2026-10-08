@@ -9,7 +9,7 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 
 | 2026-10-06 | submission_v3.csv | bag20 regressions + prior matching to the 2025-09-01 mix (4 large classes) at alpha 0.5 | 0.5996 | 0.7451 | 0.5173 | 0.3031 | score 0.28929; best candidate |
 
-| 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | not submitted | score 0.28796; second-pick candidate, hedge against fitted rules |
+| 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | **0.3049** | Zindi ID **8ii1ZeJp**. Public 0.304851105 = F1 0.528141734 / rmse 0.593163991 / 0.723339664. Pre-registered bands: >0.5353 would have replaced the alpha 0.5 pick, 0.515-0.5353 keeps the pair. Landed mid-band at 0.5281, so **selection unchanged** |
 | 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected**. Folds disagreed on alpha; see notes. `submission_diag_alpha075.csv` and `submission_v4_alpha075.csv` are the SAME file, kept under both names so the pre-registration history stays readable; `--recipe v4_alpha075 --skip-validation` reproduces it byte-identically |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, 20 seeds, prior matching alpha 0.5 | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate |
 | 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and is the **selected** one. validation 0.29068 |
@@ -93,7 +93,7 @@ one parameter the evidence is split on.
 | `submission_v4_hybrid.csv` (pre-promotion) | Bb8Js9A2 | 0.305152978 | 0.29068 | superseded |
 | `submission_v4_lags.csv` | - | 0.3045 | 0.29119 | submitted |
 | `submission_v3.csv` | - | 0.3031 | 0.28929 | submitted |
-| `submission_v4_simple.csv` | - | not submitted | 0.28796 | hedge, unused |
+| `submission_v4_simple.csv` | 8ii1ZeJp | 0.304851105 | 0.28796 | submitted, mid-band, not selected |
 
 \* the folds disagree about alpha 0.75: +0.0046 F1 on fold 1, -0.0032 on fold 2.
 
@@ -114,6 +114,60 @@ A 4.4e-16 shift in individual predictions moves an RMSE by about 1e-16 and the
 score by less than that, so the resubmission aligns provenance rather than
 changing anything measurable. Its public score should match 0.305152978 to every
 reported digit.
+
+### Three decision rules on one set of probabilities
+All three use the same lag classifier and byte-identical regressions, so every
+difference is the decision rule alone.
+
+| rule | validation F1 | public F1 | public score | Zindi ID |
+| --- | --- | --- | --- | --- |
+| simple, Fuel x1.25 | 0.5064 | 0.5281 | 0.304851105 | 8ii1ZeJp |
+| prior matching, alpha 0.5 | 0.5132 | 0.5289 | 0.305152978 | rjQUYHF9 |
+| **prior matching, alpha 0.75** | **0.5139** | **0.5353** | **0.307714693** | A37bufRz |
+
+**The rank order transferred exactly; the step sizes swapped.**
+
+| step | validation | public |
+| --- | --- | --- |
+| simple -> alpha 0.5 | **+0.0068** | +0.0008 |
+| alpha 0.5 -> alpha 0.75 | +0.0007 | **+0.0064** |
+
+Validation said the win was adopting prior matching at all, with the damping
+value a rounding detail. Public says adopting prior matching is worth almost
+nothing and the damping value is the whole effect. The two magnitudes are near
+mirror images. So validation got the ordering right and the attribution wrong --
+it identified the right family of rules and the wrong lever inside it.
+
+The first step is also inside noise and **changes sign with the probability
+model**: on bag20 probabilities Fuel x1.25 beat alpha 0.5 by 0.0008 on public
+(0.5247 against 0.5239), and on the lag probabilities alpha 0.5 beats Fuel x1.25
+by 0.0008 (0.5289 against 0.5281). A 0.28 class share on ~1,650 public customers
+has a standard error of 0.011, so +/-0.0008 is a coin flip either way.
+
+### This corrects the transfer rule stated earlier
+The earlier reading was "simple constants and structural changes transferred;
+fitted procedures and sub-0.001 refinements did not", resting mainly on
+v2_prior -> v3 going from +0.00262 on validation to -0.0004 on public. With three
+rules measured on one probability model that reading is too strong. The accurate
+version:
+
+- the **machinery** of prior matching buys essentially nothing over a single
+  global constant -- +/-0.0008 on public, sign depending on the probability model,
+  comfortably inside noise;
+- but **one scalar inside that machinery** (alpha) is worth +0.0064 on public,
+  the largest single decision-rule effect measured in the project;
+- and validation mis-ranked those two by an order of magnitude in both
+  directions.
+
+So it is not that fitted procedures fail to transfer. It is that validation was
+reliable for choosing *which family* of decision rule to use and unreliable for
+tuning *within* it -- which is exactly why the alpha disagreement needed a
+pre-registered third reading rather than more validation folds.
+
+### Scoring constants, third confirmation
+All three rows carry full-precision components and the formula reproduces each to
+about 1e-9: 0.304851105, 0.305152978 and 0.307714694 against reported
+0.304851105, 0.305152978 and 0.307714693. 0.74 and 0.816 are settled.
 
 ### Recipe reproduction, verified byte-for-byte
 Every candidate is reproducible from the raw CSVs through `make_submission.py`,
