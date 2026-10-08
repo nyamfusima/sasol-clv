@@ -6,17 +6,45 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 
 ## Results
 
-| Stack | Validation score | Public |
-| --- | --- | --- |
-| single-seed baseline (`src/baseline.py`) | 0.28164 | — |
-| **v2 — 5-seed bagging + hurdle regressions** | **0.28553** | **0.2991** |
+| Stack | Validation | Public | Note |
+| --- | --- | --- | --- |
+| single-seed baseline (`src/baseline.py`) | 0.28164 | 0.2974 | reference |
+| v2 — 5-seed bagging + hurdle regressions | 0.28553 | 0.2991 | |
+| v3 — + partial prior matching | 0.28929 | 0.3031 | **final pick 2** |
+| v4_lags — + lag series on all three models | 0.29119 | **0.3045** | rank 49 |
+| **v4_hybrid — lag classifier, v3 regressions** | 0.29068 | **0.30515** (inferred) | **primary** |
+| v4_simple — lag classifier, Fuel ×1.25 rule | 0.28796 | not submitted | hedge |
 
-Validation is the mean of two time-based folds (see
-[Validation protocol](#validation-protocol)). 31 variants were tested across four
-sweeps and 2 were kept — seed bagging (+0.00178) and the hurdle regressions
-(+0.00212), both variance reduction on the continuous targets. The full evidence,
-including every dropped variant and why, is in
-[`reports/notes.md`](reports/notes.md).
+Validation is the mean of two time-based folds; see
+[Validation protocol](#validation-protocol). `v4_hybrid`'s public score is
+inferred rather than measured: its labels are bit-identical to `v4_lags` and its
+CLV columns match `v3` to within 1 ULP, so both public components are known.
+
+**What transferred to the public board and what did not.** Six sweeps and about
+55 variants produced four kept changes. Comparing each one's validation delta
+with its measured public delta gives a sharper rule than "labels matter":
+
+| change | validation | public | public ΔF1 |
+| --- | --- | --- | --- |
+| bagging + hurdle | +0.00389 | **+0.0017** | +0.0025 |
+| Fuel ×1.25 prior | +0.00166 | **+0.0048** | **+0.0120** |
+| partial prior matching | +0.00262 | **−0.0004** | −0.0008 |
+| lag series, all three models | +0.00190 | **+0.0014** | +0.0050 |
+| R1 regression bundle (diagnostic) | +0.00086 | **−0.0009** | 0.0000 |
+
+**Simple constants and structural changes held up; fitted procedures and
+sub-0.001 refinements did not.** A single global weight both folds agreed on
+(Fuel ×1.25) nearly tripled on public. A structural model change (the hurdle)
+transferred. But partial prior matching — an IPF procedure re-estimated per
+dataset with its damping chosen cross-fold — went from +0.00262 on validation to
+−0.0004 on public, and every regression refinement below 0.001 either vanished or
+reversed. That is why the primary pick is `v4_hybrid`: it keeps the lag
+classifier's label gain and drops the lag regressors, whose +0.0012/+0.0003 RMSE
+damage on public was invisible to validation.
+
+Full evidence for every variant, kept or dropped, is in
+[`reports/notes.md`](reports/notes.md); every file and score is in
+[`reports/submissions_log.md`](reports/submissions_log.md).
 
 ## Reproduce
 
@@ -25,19 +53,44 @@ python -m venv .venv
 source .venv/Scripts/activate        # Windows; use .venv/bin/activate on Linux/macOS
 pip install -r requirements-lock.txt
 # place train.csv, test.csv and SampleSubmission.csv in data/
-python src/make_submission.py
+python src/make_submission.py --recipe v4_hybrid
 ```
 
-This goes from `data/train.csv` and `data/test.csv` to
-`submissions/submission_v2.csv` with **no cached artifacts** — it builds all 17
-snapshots in memory — prints the per-fold and mean validation score, validates
-the output before writing, and reports its runtime. It reproduces the committed
-`submissions/submission_v2.csv` **byte-for-byte**.
+One entry point, five recipes, each going from `data/train.csv` and
+`data/test.csv` to a submission with **no cached artifacts** — all 17 snapshots
+and their features are built in memory. Each prints its per-fold and mean
+validation score, validates the output before writing, and reports its runtime.
 
-```bash
-# the 20-seed bag, from the same code path
-python src/make_submission.py --seeds 42-61 --out submissions/submission_v2_bag20.csv
-```
+| recipe | seeds | classifier lags | regression lags | decision rule | output |
+| --- | --- | --- | --- | --- | --- |
+| **v4_hybrid** | 42–61 | yes | no | prior matching, α 0.5 | primary candidate |
+| v4_lags | 42–61 | yes | yes | prior matching, α 0.5 | |
+| v4_simple | 42–61 | yes | no | Fuel ×1.25 | hedge |
+| v3 | 42–61 | no | no | prior matching, α 0.5 | final pick 2 |
+| v2 | 42–46 | no | no | argmax | |
+
+The submission path needs only **pandas, numpy, scikit-learn and lightgbm**.
+CatBoost, XGBoost and pyarrow appear in `requirements-lock.txt` for the sweep
+scripts and are not imported when producing a submission.
+
+### Reproducibility, stated precisely
+
+`--recipe v4_hybrid` is **byte-identical** across runs and reproduces the
+committed `submissions/submission_v4_hybrid.csv` exactly (verified by `cmp`).
+`--recipe v2` likewise reproduces `submission_v2.csv` byte-for-byte.
+
+One honest caveat. `submission_v3.csv` and `submission_v2_bag20.csv` were
+produced by an earlier script that averaged per-seed predictions with
+`np.mean([...], axis=0)` (pairwise summation), whereas `make_submission`
+accumulates in a loop (sequential). The arithmetic is identical but the last-bit
+rounding is not, so **no single implementation can be byte-exact for both
+lineages**. Re-deriving v4_hybrid through the recipe changed its CLV columns by
+exactly 1 ULP (4.4e-16), which a four-decimal RMSE cannot see; the recipe's
+output is what is now committed, so the artifact and its recipe agree.
+
+Note also that CSV floats are written with `float_format='%.17g'` and must be
+read with `float_precision='round_trip'` — pandas' default CSV float parser is
+not correctly rounded and shifts values by 1 ULP on every read/rewrite cycle.
 
 ### Environment, hardware and runtime
 
@@ -47,9 +100,13 @@ python src/make_submission.py --seeds 42-61 --out submissions/submission_v2_bag2
 | Packages | pinned in [`requirements-lock.txt`](requirements-lock.txt) |
 | OS | Windows 11 (26200) |
 | CPU | AMD Zen 3, 12 logical cores |
-| Runtime | **646 s (10.8 min)** for `make_submission.py` end to end, 5 seeds, including both validation folds and the final fit |
+| `--recipe v4_hybrid` | **about 53 min** end to end, including both validation folds |
+| `--recipe v4_hybrid --skip-validation` | **1642 s (27 min)**, final fit only |
+| `--recipe v2` | 646 s (11 min) |
 
-Scales roughly linearly in the seed count: the 20-seed bag is about 4× that.
+Runtimes are measured with `time.monotonic()`. An earlier report of 38,162 s was
+an artefact of the system clock being adjusted mid-run while durations were
+computed from `time.time()`.
 
 ## Method
 
@@ -57,13 +114,27 @@ Scales roughly linearly in the seed count: the 20-seed bag is about 4× that.
    holds every customer with 3+ distinct baskets strictly before the cutoff,
    with features built **only** from rows strictly before it, and the
    label-rule outcomes for the three months after it.
-2. **Features** — 97 columns, the `base` block of [`src/features.py`](src/features.py):
+2. **Features** — the `base` block of [`src/features.py`](src/features.py), 97
+   columns:
    recency, tenure, basket-gap mean and standard deviation, per-quarter
    fuel/non-fuel spend and basket counts for q1–q4 plus the last month and all
    time, derived rate ratios (last quarter against the customer's own long-run
    rate), and per-category previous-quarter spend and ever-bought flags.
-3. **Opportunity** — one 17-class LightGBM; probabilities averaged over the seed
-   set, then argmax.
+   plus, for the v4 recipes, the **lag series** of
+   [`src/features3.py`](src/features3.py) (62 more): twelve monthly lags of fuel
+   litres, fuel rands, non-fuel rands and basket counts, and thirteen weekly fuel
+   totals. Lags reaching back before a customer's first transaction are NaN
+   rather than 0, so "no history" stays distinct from "history with no spend".
+   This is the only feature block in the project that improved the classifier;
+   see `reports/notes.md` for the fourteen that did not.
+3. **Opportunity** — one 17-class LightGBM, probabilities averaged over the seed
+   set, then a **decision rule**. The rule is where most of the F1 came from:
+   iterative proportional fitting nudges the predicted class mix toward the last
+   fully observed snapshot's true mix over the four large classes, and the
+   resulting weights are damped by α = 0.5 before the argmax. α was selected
+   cross-fold — each fold's own search chose 0.5 independently — and
+   re-validated on the lag classifier's probabilities. Full matching (α = 1)
+   gives back the entire gain, so matching the mix is not the objective.
 4. **CLV_fuel / CLV_nonfuel** — a hurdle model: `P(y>0)` from a classifier times
    `E[y|y>0]` from a regressor fitted on positive rows only. Each stage is
    seed-averaged and the product is clipped at 0. This is the single largest
@@ -151,7 +222,8 @@ them at all.
 | Path | What |
 | --- | --- |
 | `src/make_submission.py` | the entry point: raw CSVs → submission, no cache |
-| `src/features.py` | feature blocks; `base` is what ships |
+| `src/features.py` | feature blocks; `base` (97 columns) is what ships |
+| `src/features3.py` | the lag series (62 columns), used by every v4 recipe |
 | `src/snapshots.py` | snapshot construction (`load_data`, `build_one`) and the optional parquet cache |
 | `src/label_rules.py`, `src/label_config.json` | official label generator and config, unmodified |
 
@@ -164,16 +236,20 @@ them at all.
 | `src/sweep2.py` | sweeps A–G: training recipe, regressions, adoption, cutoff density, rule events, new features, seasonal analogs |
 | `src/train_label.py` | sweep 1: label-model variants a–f |
 | `src/features2.py` | block F feature groups (customer id, sites, fuel type/price, timing, vouchers) |
+| `src/features4.py` | sweep 6 blocks N1–N6 (own label history, per-category history, recency, basket structure, weekly series, longer lookback) |
 | `src/stability.py` | seed-stability analysis and the 20-seed bag |
 | `src/prior_adjust.py` | 3-parameter class-prior adjustment, cross-fold |
+| `src/calibrate.py` | block H: the decision-rule search that produced prior matching |
+| `src/project_mix.py` | block I: projected target mixes for prior matching |
+| `src/sweep5.py` | sweeps 5–6: regression tracks R1–R5, label tracks L1–L5, blocks N1–N7 |
 | `reports/notes.md` | every variant tried, kept or dropped, with the reasoning |
 | `reports/submissions_log.md` | every file in `submissions/`, with validation and public scores |
 | `docs/` | official label rules and data dictionary |
 
 Nothing in the **Record** group is imported by `make_submission.py`; they are
-kept deliberately, because they are the evidence behind 31 dropped variants and
-a reviewer should be able to check the negative results, not just the final
-model.
+kept deliberately, because they are the evidence behind roughly fifty dropped
+variants across six sweeps, and a reviewer should be able to check the negative
+results, not just the final model.
 
 `data/`, `submissions/` and `preds/` are local only and git-ignored. Every file
 in `submissions/` is named after the run that produced it and has a row in
