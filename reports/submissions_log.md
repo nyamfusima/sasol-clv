@@ -10,7 +10,7 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | 2026-10-06 | submission_v3.csv | bag20 regressions + prior matching to the 2025-09-01 mix (4 large classes) at alpha 0.5 | 0.5996 | 0.7451 | 0.5173 | 0.3031 | score 0.28929; best candidate |
 
 | 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | not submitted | score 0.28796; second-pick candidate, hedge against fitted rules |
-| 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected**. Folds disagreed on alpha; see notes |
+| 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected**. Folds disagreed on alpha; see notes. `submission_diag_alpha075.csv` and `submission_v4_alpha075.csv` are the SAME file, kept under both names so the pre-registration history stays readable; `--recipe v4_alpha075 --skip-validation` reproduces it byte-identically |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, 20 seeds, prior matching alpha 0.5 | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate |
 | 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and is the **selected** one. validation 0.29068 |
 | 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude) | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086) |
@@ -114,6 +114,23 @@ A 4.4e-16 shift in individual predictions moves an RMSE by about 1e-16 and the
 score by less than that, so the resubmission aligns provenance rather than
 changing anything measurable. Its public score should match 0.305152978 to every
 reported digit.
+
+### Recipe reproduction, verified byte-for-byte
+Every candidate is reproducible from the raw CSVs through `make_submission.py`,
+with no cached artifacts:
+
+| file | recipe | verification | runtime |
+| --- | --- | --- | --- |
+| `submission_v4_alpha075.csv` | `--recipe v4_alpha075` | **byte-identical** | 1970 s |
+| `submission_v4_hybrid.csv` | `--recipe v4_hybrid` | **byte-identical**, also from a clean GitHub clone | 4785 s full / 1642 s final-fit |
+| `submission_v4_simple.csv` | `--recipe v4_simple` | **byte-identical** | 1806 s |
+| `submission_v2.csv` | `--recipe v2` | **byte-identical** | 646 s |
+
+So both submitted and selected files -- A37bufRz and rjQUYHF9 -- are exactly what
+their documented recipes produce. `submission_v4_simple.csv` needed no promotion:
+it was built by composition from cached probabilities, and because its CLV came
+from the already-promoted v4_hybrid, both lineages are now the loop-summation
+form and the recipe matches it exactly.
 
 ### The scoring formula is now confirmed exactly
 v4_hybrid is the first public row reported with full-precision components, and it

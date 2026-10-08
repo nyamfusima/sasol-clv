@@ -86,9 +86,18 @@ scripts and are not imported when producing a submission.
 
 ### Reproducibility, stated precisely
 
-`--recipe v4_hybrid` is **byte-identical** across runs and reproduces the
-committed `submissions/submission_v4_hybrid.csv` exactly (verified by `cmp`).
-`--recipe v2` likewise reproduces `submission_v2.csv` byte-for-byte.
+Every candidate recipe is **byte-identical** to its committed artifact, verified
+with `cmp`:
+
+| file | recipe | runtime |
+| --- | --- | --- |
+| `submission_v4_alpha075.csv` (selected) | `--recipe v4_alpha075` | 1970 s |
+| `submission_v4_hybrid.csv` (selected) | `--recipe v4_hybrid` | 4785 s full, 1642 s final fit |
+| `submission_v4_simple.csv` | `--recipe v4_simple` | 1806 s |
+| `submission_v2.csv` | `--recipe v2` | 646 s |
+
+`v4_hybrid` was additionally verified from a fresh GitHub clone and a lock-file
+venv. Both submitted and selected files are exactly what their recipes produce.
 
 One honest caveat. `submission_v3.csv` and `submission_v2_bag20.csv` were
 produced by an earlier script that averaged per-seed predictions with
