@@ -1694,6 +1694,87 @@ machinery is neutral rather than harmful, and that the parameter inside it is
 where the value sits. Keeping both alpha values as the picks remains the right
 call on that evidence.
 
+## Fine alpha grid on the cached lag probabilities (8 Oct, no refits)
+
+Prior matching with the stale target, swept from 0.40 to 1.00 in steps of 0.05,
+on the cached 20-seed lag-classifier fold probabilities. Nothing was selected on
+this; it was run to see the shape.
+
+### Four large classes matched
+| alpha | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| 0.40 | 0.5087 | 0.5145 | 0.5116 |
+| 0.45 | 0.5086 | 0.5160 | 0.5123 |
+| 0.50 | 0.5095 | **0.5169** | 0.5132 |
+| 0.55 | 0.5115 | 0.5167 | 0.5141 |
+| **0.60** | 0.5122 | 0.5163 | **0.5143** |
+| 0.65 | 0.5115 | **0.5169** | 0.5142 |
+| 0.70 | 0.5126 | 0.5154 | 0.5140 |
+| 0.75 | **0.5141** | 0.5137 | 0.5139 |
+| 0.80 | 0.5124 | 0.5133 | 0.5128 |
+| 0.85 | 0.5102 | 0.5115 | 0.5109 |
+| 0.90 | 0.5089 | 0.5110 | 0.5100 |
+| 0.95 | 0.5070 | 0.5109 | 0.5089 |
+| 1.00 | 0.5063 | 0.5088 | 0.5075 |
+
+**The mean is a broad plateau.** Within 0.001 of the best mean: **alpha
+0.55-0.75**, five of thirteen grid points, peaking at **0.60**. Outside that it
+falls away steadily, losing 0.0068 by alpha 1.00.
+
+**The folds disagree about where the optimum sits, not about the shape.** Fold
+2025-06 peaks at 0.75 with a one-point plateau; fold 2025-09 peaks at 0.65 with a
+plateau spanning 0.45-0.65. The two curves are roughly parallel -- fold 1 runs
+0.0058 below fold 2 at alpha 0.40 and 0.0026 below at 1.00 -- and the difference
+changes sign between 0.70 and 0.80, which is exactly where the two selected picks
+straddle.
+
+**Where our two picks sit.** alpha 0.75 is at the **upper edge** of the mean
+plateau and alpha 0.50 is just **below its lower edge** (0.5132 against the best
+0.5143, 0.0011 short). Neither is the validation-mean optimum; **alpha 0.60 is**,
+and it has never been submitted. Reporting that, not acting on it -- the public
+board was used once as a pre-registered reading and spending another submission
+to chase a 0.0004 validation-mean difference inside a plateau would be the kind
+of tuning the pre-registration existed to prevent.
+
+### Six classes matched (adding adoption:Other and growth:Beverages)
+This was specified in sweep 5 track D and never run until now.
+
+| alpha | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| 0.40 | 0.5070 | 0.5132 | 0.5101 |
+| 0.45 | 0.5078 | 0.5143 | 0.5110 |
+| 0.50 | 0.5083 | 0.5142 | 0.5113 |
+| **0.55** | 0.5100 | 0.5154 | **0.5127** |
+| 0.60 | 0.5094 | **0.5159** | 0.5126 |
+| 0.65 | 0.5090 | 0.5151 | 0.5121 |
+| 0.70 | 0.5106 | 0.5138 | 0.5122 |
+| 0.75 | 0.5118 | 0.5102 | 0.5110 |
+| 0.80 | **0.5129** | 0.5091 | 0.5110 |
+| 0.85 | 0.5120 | 0.5085 | 0.5102 |
+| 0.90 | 0.5109 | 0.5083 | 0.5096 |
+| 0.95 | 0.5079 | 0.5079 | 0.5079 |
+| 1.00 | 0.5069 | 0.5073 | 0.5071 |
+
+Plateau within 0.001 of its best: alpha 0.55-0.70, peaking at 0.55.
+
+**Matching six classes is worse than four at every single alpha.** Best mean
+0.5127 against 0.5143, and the gap holds across the whole grid. Adding
+`New category adoption: Other` and `Existing-category growth: Beverages` as
+matched classes pins two targets the model cannot hit -- adoption classes were
+shown unmonetisable even with an oracle in block C -- and the constraint costs
+accuracy on the four classes that matter. Track D's open question is answered:
+no, do not match more classes.
+
+### No diagnostic file written
+The pre-registered condition was to write a submission only if the plateau
+clearly extends beyond 0.75 on **both** folds. It does not:
+
+- fold 2025-06's own plateau is 0.75-0.75 and it drops 0.0017 by alpha 0.80;
+- fold 2025-09 is already 0.0032 past its own best at alpha 0.75 and keeps
+  falling.
+
+Both folds decline beyond 0.75, so nothing was written.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
