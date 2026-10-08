@@ -1905,6 +1905,142 @@ Dropped. Nothing written, no recipe added. The transferable finding is that
 which bounds how much of our 0.0131 argmax-to-alpha improvement could plausibly
 be fragile: at most the last 0.0020.
 
+## Sweep 7, block E2: two regression ideas, both dropped at the screen (8 Oct)
+
+Both run at 5 seeds on base features (no lags), which is the regression recipe
+the two selected picks actually ship. Scores below hold F1 at the lag
+classifier's fold values (0.5095 / 0.5169) so every delta is the regression
+change alone. The same-seed reference is the pure hurdle at **0.29059**.
+
+### E2a: convex blend of the hurdle and a direct regressor
+`pred = (1-lambda)*hurdle + lambda*direct`, both on the transformed target.
+
+**CLV_fuel**
+| lambda | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| 0.00 (hurdle) | 0.5975 | **0.5994** | 0.5984 |
+| 0.25 | 0.5967 | 0.5997 | **0.5982** |
+| 0.50 | **0.5965** | 0.6005 | 0.5985 |
+| 0.75 | 0.5968 | 0.6017 | 0.5993 |
+| 1.00 (direct) | 0.5977 | 0.6033 | 0.6005 |
+
+**CLV_nonfuel**
+| lambda | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| 0.00 (hurdle) | **0.7352** | **0.7450** | **0.7401** |
+| 0.25 | 0.7357 | 0.7451 | 0.7404 |
+| 0.50 | 0.7366 | 0.7456 | 0.7411 |
+| 0.75 | 0.7380 | 0.7463 | 0.7422 |
+| 1.00 (direct) | 0.7397 | 0.7474 | 0.7436 |
+
+Non-fuel is unambiguous: RMSE rises monotonically in lambda on **both** folds, so
+the hurdle is the best point of the whole family and the direct regressor costs
++0.0045 / +0.0024. Nothing to blend.
+
+Fuel is the interesting case, and it is a clean illustration of why lambda had to
+be chosen cross-fold. Fold 2025-06 has a shallow interior minimum at lambda
+0.25-0.50 worth -0.0010; fold 2025-09 is monotone increasing, +0.0039 by lambda
+1.00. **The two folds disagree about the direction, not just the size.** Chosen
+honestly:
+
+| chosen on | lambda | held-out fold | RMSE | against hurdle |
+| --- | --- | --- | --- | --- |
+| fold 2025-06 | 0.50 | 2025-09 | 0.6005 | **+0.0011** |
+| fold 2025-09 | 0.00 | 2025-06 | 0.5975 | +0.0000 |
+
+So one direction costs 0.0011 and the other selects the hurdle itself. Combined
+score **0.29036, -0.00023** against the same-seed hurdle: dropped, and it also
+fails the component slack (rmse_fuel worse by 0.0011) and the both-folds
+condition. Note the mean-optimal lambda for fuel (0.25, mean 0.5982 against
+0.5984) is a 0.0002 difference -- inside noise -- and the cross-fold protocol
+correctly refuses to bank it.
+
+### E2b: forward-in-time isotonic calibration of the hurdle gate
+The gate P(y>0) was recalibrated with an isotonic fit trained on the last
+snapshot whose 3-month outcome window closes before the fold cutoff
+(2025-03-01 for fold 2025-06, 2025-06-01 for fold 2025-09), then multiplied by
+the unchanged magnitude stage.
+
+**It made reliability worse on all four target-fold combinations.**
+
+| target / fold | mean abs decile gap, raw | calibrated | RMSE change |
+| --- | --- | --- | --- |
+| CLV_fuel / 2025-06 | 0.0099 | 0.0378 | +0.0048 |
+| CLV_fuel / 2025-09 | 0.0091 | 0.0144 | +0.0011 |
+| CLV_nonfuel / 2025-06 | 0.0212 | 0.0482 | +0.0080 |
+| CLV_nonfuel / 2025-09 | 0.0146 | 0.0209 | +0.0021 |
+
+Combined score **0.28754, -0.00305**: dropped, the largest regression loss of
+the sweep.
+
+#### Why, measured rather than assumed
+The gate's bias is **not stationary across one quarter**, and it is already small
+at the folds:
+
+| target / fold | gate bias at the source | gate bias at the fold | after calibration |
+| --- | --- | --- | --- |
+| CLV_fuel / 2025-06 | +0.035 | +0.003 | **-0.037** |
+| CLV_fuel / 2025-09 | +0.003 | -0.001 | -0.006 |
+| CLV_nonfuel / 2025-06 | +0.048 | +0.008 | **-0.040** |
+| CLV_nonfuel / 2025-09 | +0.008 | +0.005 | -0.002 |
+
+(bias = mean predicted P(y>0) minus the realised positive rate.)
+
+The 2025-03-01 source over-predicts by +0.035 and +0.048; the same construction
+at 2025-06-01 over-predicts by +0.003 and +0.008. The calibrator therefore
+learns a correction an order of magnitude too large and applying it **flips** a
++0.003 bias to -0.037. Where the two cutoffs happen to agree (the 2025-09 fold,
+source bias +0.003 against fold bias -0.001) the damage is correspondingly small
+but still negative.
+
+The isotonic fit is not at fault -- it is accurate where it is fitted. In-sample
+reliability at its own source is 0.0017-0.0042, better than the raw gate manages
+at the fold. The entire loss is transfer:
+
+| target / fold | isotonic in-sample at source | raw gate at fold | transplanted |
+| --- | --- | --- | --- |
+| CLV_fuel / 2025-06 | 0.0042 | 0.0099 | 0.0378 |
+| CLV_fuel / 2025-09 | 0.0017 | 0.0091 | 0.0144 |
+| CLV_nonfuel / 2025-06 | 0.0040 | 0.0212 | 0.0482 |
+| CLV_nonfuel / 2025-09 | 0.0035 | 0.0146 | 0.0209 |
+
+**The general condition this fails:** a forward-in-time calibrator helps only if
+the miscalibration is stable over the gap it is carried across. Here the
+residual bias (0.003 to 0.008 at the folds) is *smaller than its own
+quarter-to-quarter variation* (0.035 to 0.048 one quarter earlier), so any such
+calibrator necessarily imports more error than it removes. The likely reason the
+source is so much worse is simply less training data -- 24,850 rows at
+2025-03-01 against 38,409 at 2025-06-01 -- and the bias shrinks as history
+accumulates, which is precisely the wrong direction for carrying a correction
+forward.
+
+A useful by-product: **LightGBM's gate is already well calibrated out of
+sample.** Raw decile gaps of 0.009-0.021 with mixed signs, and a mean bias of
++0.003 to +0.008 on 4,961-5,238 held-out customers, leave essentially nothing
+for a calibration stage to collect. This closes gate calibration as a lever, not
+just this implementation of it.
+
+### No 20-seed confirmation was run
+The protocol was a 5-seed screen followed by a 20-seed confirmation *for
+anything that passes the screen*. Neither block passes, and neither is close:
+E2a is 0.0017 short of the +0.0015 bar and E2b is 0.0045 short. For E2a the
+lambda = 0 point **is** the hurdle, so more seeds improve both arms of the
+comparison and cannot move the difference by 0.0017 -- seed bagging was worth
++0.00178 in total across all three models when first measured. Spending roughly
+20 minutes of fits to reconfirm a negative at higher precision was not
+worthwhile, so nothing was written and no diagnostic file was produced.
+
+### Sweep 7 summary
+| block | change | mean score | against reference | verdict |
+| --- | --- | --- | --- | --- |
+| E1 | expected-F1 decoding (3 variants) | F1 0.5118-0.5119 | -0.0020 vs alpha 0.75 | dropped |
+| E2a | hurdle/direct blend, cross-fold lambda | 0.29036 | -0.00023 | dropped |
+| E2b | forward-in-time isotonic gate calibration | 0.28754 | -0.00305 | dropped |
+
+Three for three negative, and the recipe table is unchanged. Running total:
+**four kept changes out of 60 variants across seven sweeps.** The two selected
+picks (`v4_alpha075`, `v4_hybrid`) are untouched.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

@@ -291,6 +291,11 @@ def reg_cache(ctx, seeds, tag):
     return out
 
 
+def rmse(pred, truth):
+    """W.rmse expects a pandas Series; the cache holds plain arrays."""
+    return float(np.sqrt(((np.asarray(pred) - np.asarray(truth)) ** 2).mean()))
+
+
 def hurdle_of(d, v, t):
     return np.clip(d[f'{v}|{t}|gate'] * d[f'{v}|{t}|mag'], 0, None)
 
@@ -345,7 +350,7 @@ def track_e2a(ctx, args, d=None, seeds=None, tag='screen'):
             for v in V.FOLDS:
                 p = ((1 - lam) * hurdle_of(d, v, t)
                      + lam * np.clip(d[f'{v}|{t}|direct'], 0, None))
-                r.append(W.rmse(p, d[f'{v}|{t}|truth']))
+                r.append(rmse(p, d[f'{v}|{t}|truth']))
             curves[t][lam] = r
             tail = '  <- hurdle' if lam == 0 else ('  <- direct' if lam == 1 else '')
             print(f'    {lam:<9.2f}{r[0]:>14.4f}{r[1]:>14.4f}{np.mean(r):>9.4f}{tail}')
@@ -401,8 +406,8 @@ def track_e2b(ctx, args, d=None, seeds=None, tag='screen'):
             ac = float(np.abs(pd.Series(gc).groupby(q).mean() - act).mean())
             print(f'      mean |decile gap|: raw {ar:.4f} -> calibrated {ac:.4f}')
             p = np.clip(gc * d[f'{v}|{t}|mag'], 0, None)
-            cal.setdefault(t, {})[v] = W.rmse(p, d[f'{v}|{t}|truth'])
-            raw.setdefault(t, {})[v] = W.rmse(hurdle_of(d, v, t), d[f'{v}|{t}|truth'])
+            cal.setdefault(t, {})[v] = rmse(p, d[f'{v}|{t}|truth'])
+            raw.setdefault(t, {})[v] = rmse(hurdle_of(d, v, t), d[f'{v}|{t}|truth'])
             print(f'      RMSE: hurdle {raw[t][v]:.4f} -> calibrated gate '
                   f'{cal[t][v]:.4f} ({cal[t][v] - raw[t][v]:+.4f})')
     RF = [cal['CLV_fuel'][v] for v in V.FOLDS]

@@ -30,8 +30,8 @@ parameter the evidence is split on, rather than agreeing with each other — see
 [`reports/notes.md`](reports/notes.md) for why that is deliberate and what it
 risks.
 
-**What transferred to the public board and what did not.** Six sweeps and about
-55 variants produced four kept changes. Comparing each one's validation delta
+**What transferred to the public board and what did not.** Seven sweeps and 60
+variants produced four kept changes. Comparing each one's validation delta
 with its measured public delta gives a sharper rule than "labels matter":
 
 | change | validation | public | public ΔF1 |
@@ -180,13 +180,26 @@ validation print reproduces exactly: F1 0.5095 / 0.5169, rmse_fuel 0.5969 /
    resulting weights are damped by α = 0.5 before the argmax. α was selected
    cross-fold — each fold's own search chose 0.5 independently — and
    re-validated on the lag classifier's probabilities. Full matching (α = 1)
-   gives back the entire gain, so matching the mix is not the objective.
+   gives back the entire gain, so matching the mix is not the objective — and
+   sweep 7 confirmed that a third way: a parameter-free rule that maximises the
+   model's own expected weighted F1 hits the true Fuel share almost exactly
+   (0.280 against 0.274, where α = 0.75 sits at 0.262) and still scores 0.002
+   lower. Across the five non-argmax rules measured, the rank correlation
+   between class-mix distance and F1 is 0.10. That same rule recovers **85% of
+   the whole argmax→α gain with no fitted parameter**, which bounds the
+   tuning-sensitive part of the decision rule at the last 0.0020.
 4. **CLV_fuel / CLV_nonfuel** — a hurdle model: `P(y>0)` from a classifier times
    `E[y|y>0]` from a regressor fitted on positive rows only. Each stage is
    seed-averaged and the product is clipped at 0. This is the single largest
    win in the project and the mechanism is confirmed rather than assumed:
    non-fuel is about 65% zeros per quarter against fuel's 29%, and the hurdle
-   helps non-fuel more than fuel, ordered by zero-inflation.
+   helps non-fuel more than fuel, ordered by zero-inflation. Neither stage wants
+   further work: blending the hurdle with a direct regressor is worse at every
+   mixing weight on both folds for non-fuel and fails cross-fold selection for
+   fuel, and the gate needs no calibration — it carries a mean bias of only
+   +0.003 to +0.008 on held-out folds, less than that bias's own
+   quarter-to-quarter drift, so a forward-in-time isotonic calibrator imports
+   more error than it removes (−0.00305 on the combined score).
 5. **Final training** — the submitted models are retrained on **all 16
    snapshots** and predict the test cutoff **2025-12-01**, with features built
    from all of `train.csv`, which ends 2025-11-30. No outcome window is
@@ -289,6 +302,7 @@ them at all.
 | `src/validate.py` | fold definitions, per-class F1, confusion matrices, the scoring helper |
 | `src/sweep2.py` | sweeps A–G: training recipe, regressions, adoption, cutoff density, rule events, new features, seasonal analogs |
 | `src/train_label.py` | sweep 1: label-model variants a–f |
+| `src/sweep7.py` | sweep 7: expected-F1 decoding, hurdle/direct blend, gate calibration |
 | `src/features2.py` | block F feature groups (customer id, sites, fuel type/price, timing, vouchers) |
 | `src/features4.py` | sweep 6 blocks N1–N6 (own label history, per-category history, recency, basket structure, weekly series, longer lookback) |
 | `src/stability.py` | seed-stability analysis and the 20-seed bag |
@@ -301,9 +315,9 @@ them at all.
 | `docs/` | official label rules and data dictionary |
 
 Nothing in the **Record** group is imported by `make_submission.py`; they are
-kept deliberately, because they are the evidence behind roughly fifty dropped
-variants across six sweeps, and a reviewer should be able to check the negative
-results, not just the final model.
+kept deliberately, because they are the evidence behind fifty-six dropped
+variants across seven sweeps, and a reviewer should be able to check the
+negative results, not just the final model.
 
 `data/`, `submissions/` and `preds/` are local only and git-ignored. Every file
 in `submissions/` is named after the run that produced it and has a row in
