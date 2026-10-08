@@ -9,6 +9,8 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 
 | 2026-10-06 | submission_v3.csv | bag20 regressions + prior matching to the 2025-09-01 mix (4 large classes) at alpha 0.5 | 0.5996 | 0.7451 | 0.5173 | 0.3031 | score 0.28929; best candidate |
 
+| 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | not submitted | score 0.28796; second-pick candidate, hedge against fitted rules |
+| 2026-10-08 | submission_diag_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 | 0.5996 | 0.7451 | - | not submitted | **diagnostic, not for selection**; the folds disagreed on alpha |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, 20 seeds, prior matching alpha 0.5 | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate |
 | 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | *0.30515 inferred* | score 0.29068; labels identical to v4_lags and CLV identical to v3, so its public score follows exactly; **+0.00065 over v4_lags** |
 | 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude) | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086) |

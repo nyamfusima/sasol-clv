@@ -1421,6 +1421,108 @@ recency.
 No diagnostic was written: the best non-passing block (N1, +0.00044) is also
 negative against the 20-seed incumbent, so it has no configuration worth probing.
 
+## Final-pick hardening (8 Oct)
+
+### make_submission.py recipes
+One entry point, five recipes, all from the raw CSVs with no cached artifacts.
+Dependencies are pandas, numpy, scikit-learn and lightgbm only -- no CatBoost,
+XGBoost or pyarrow on the submission path.
+
+| recipe | seeds | classifier lags | regression lags | decision rule |
+| --- | --- | --- | --- | --- |
+| v2 | 42-46 | no | no | argmax |
+| v3 | 42-61 | no | no | prior matching, alpha 0.5 |
+| **v4_hybrid** (primary) | 42-61 | **yes** | no | prior matching, alpha 0.5 |
+| v4_lags | 42-61 | yes | yes | prior matching, alpha 0.5 |
+| v4_simple | 42-61 | yes | no | Fuel x1.25 |
+
+`--recipe v4_hybrid` reproduces the validation numbers exactly: F1 0.5095 /
+0.5169, rmse_fuel 0.5969 / 0.5996, rmse_nonfuel 0.7350 / 0.7451, score
+**0.29068**. Runtime about **53 minutes** on 12 logical cores.
+
+### Two measurement problems found and fixed
+**The script's own timer was wrong.** It reported 38,162s because the system
+clock jumped about 35,005s mid-run and durations were computed with
+`time.time()`. Now measured with `time.monotonic()`, which is immune to clock
+adjustments. The true runtime (about 53 min) is corroborated by a direct
+sampling of the process -- 118 CPU-seconds over 20 seconds of wall time, so 5.9
+cores busy.
+
+**Byte-exact reproduction is impossible across both lineages, and this is not
+nondeterminism.** The recipe reproduced v4_hybrid's labels on 100.0000% of rows
+but its CLV columns differed by exactly 1 ULP (4.441e-16) on 1,582 and 2,203
+rows. The cause is summation order: v4_hybrid's CLV descended from
+`stability.py`, which averaged per-seed arrays with `np.mean([...], axis=0)`
+(pairwise summation), while `make_submission` accumulates `out += ...` in a loop
+(sequential). The arithmetic is identical; the rounding is not. No single
+implementation can be byte-exact for both lineages, which is why the v2 recipe
+*is* byte-exact -- v2 came from the loop form.
+
+Resolved by promoting the recipe's output to `submissions/submission_v4_hybrid.csv`,
+so the artifact we might submit is the one the documented recipe produces.
+Consequence to record: its CLV columns are now within 1 ULP of
+`submission_v3.csv` rather than bit-identical to them. That does not affect the
+inferred public score, since RMSE at four decimals cannot see 4e-16, and
+`submission_v3.csv` itself is untouched (it is already submitted and selected).
+
+### submission_v4_simple.csv -- the second-pick hedge
+The Fuel-growth weight was re-validated on the lag classifier's probabilities
+rather than carried over from bag20's:
+
+| weight | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| 1.000 | 0.4966 | 0.5051 | 0.5009 |
+| 1.125 | 0.5004 | 0.5068 | 0.5036 |
+| **1.250** | **0.5036** | 0.5093 | **0.5064** |
+| 1.375 | 0.5023 | **0.5095** | 0.5059 |
+| 1.500 | 0.5019 | 0.5047 | 0.5033 |
+
+Own-fold optima are 1.25 (fold 1) and 1.375 (fold 2), so the folds **disagree**
+and the weight stays at the 1.25 default. Held out, 1.375-from-fold-2 gives
+0.5023 on fold 1 and 1.25-from-fold-1 gives 0.5093 on fold 2. Note the weight is
+less stable here than on bag20's probabilities, where both folds independently
+chose 1.25 -- the disagreement is one grid step and worth 0.0005 of mean F1, so
+the default is safe, but it is no longer a clean two-fold replication.
+
+| candidate | validation F1 | validation score |
+| --- | --- | --- |
+| v4_hybrid (prior matching) | 0.5095 / 0.5169 | **0.29068** |
+| v4_simple (Fuel x1.25) | 0.5036 / 0.5093 | 0.28796 |
+
+v4_simple is -0.00271 on validation, which is the point. The transfer table
+quantifies the hedge: prior matching cost -0.0004 on public where validation
+promised +0.0026, a -0.0030 gap, while Fuel x1.25 gained +0.0048 against a
+promised +0.0017. If that pattern repeats on the lag probabilities, v4_simple's
+0.0068 validation F1 deficit could largely close on the private split.
+
+Unlike v4_hybrid, v4_simple's public score cannot be inferred -- its labels are
+new, so no submitted file shares them. It is a genuine hedge, not an arbitrage.
+
+### submission_diag_alpha075.csv -- diagnostic, not for selection
+v4_hybrid with alpha 0.75 instead of 0.5, regressions identical, so only the
+decision rule differs. The folds disagreed on alpha (fold 1 preferred 0.75, fold
+2 preferred 0.5), which is why 0.5 was kept, and the public board would be a
+third reading.
+
+Predicted class mixes against the probe-derived public shares (0.276 Stable,
+0.297 Inactivity, 0.252 Fuel growth):
+
+| file | Stable | Inactivity | Fuel growth | sum abs err |
+| --- | --- | --- | --- | --- |
+| v4_hybrid, alpha 0.5 | 0.327 | 0.297 | 0.261 | 0.060 |
+| diag, alpha 0.75 | 0.300 | 0.286 | 0.270 | 0.053 |
+| v4_simple, Fuel x1.25 | 0.336 | 0.299 | 0.299 | 0.109 |
+
+alpha 0.75 sits marginally closer to the public mix. Read that weakly: block I
+established that matching the mix is **not** what makes prior matching work --
+the stale target won there despite being the least accurate of five -- so mix
+proximity is not evidence of a better decision rule.
+
+All three new files have CLV columns bit-identical to v4_hybrid, so the set
+differs only in the decision rule. Re-deriving alpha 0.5 from the cached test
+probabilities reproduces v4_hybrid's labels on 100.0000% of rows, confirming the
+composition path and the recipe agree.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
