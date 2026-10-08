@@ -1570,6 +1570,82 @@ I also briefly mis-stated this in working: a hand calculation suggested a
 systematic 7e-5 residual, which came from my own division error, not from the
 formula. The computed check is the authority.
 
+## The alpha decision, with all three readings (8 Oct)
+
+The damping exponent on the prior-matching weights is the single parameter the
+two validation folds never agreed on. The public board was taken as a
+pre-registered third reading, and it favoured 0.75.
+
+| reading | n | alpha 0.5 | alpha 0.75 | delta F1 |
+| --- | --- | --- | --- | --- |
+| validation fold 2025-06 | 4,961 | 0.5095 | 0.5141 | **+0.0046** |
+| validation fold 2025-09 | 5,238 | 0.5169 | 0.5137 | **-0.0032** |
+| public board | ~1,650 | 0.528896 | 0.535301 | **+0.0064** |
+
+- unweighted mean of the three: **+0.0026**
+- sample-size weighted pooled: **+0.0014**
+- validation-only mean: +0.0007
+
+Public score 0.305152978 (alpha 0.5, rank 49) against **0.307714693** (alpha
+0.75, rank 37), a delta of **+0.00256** with the regressions byte-identical, so
+the whole difference is the decision rule.
+
+### Why this counts as evidence and where it stops
+It counts because the threshold was **pre-registered**: alpha 0.75 was submitted
+as a diagnostic with F1 > 0.533 named in advance as the bar, and it cleared it at
+0.5353. That is a genuine out-of-sample test rather than picking the best of two
+after seeing both.
+
+It stops short of settling the matter for three reasons.
+- The public split is roughly 1,650 customers. A class share near 0.28 has a
+  standard error of 0.011 there, so a +0.0064 weighted-F1 difference is of the
+  same order as sampling noise. One pre-registered reading is still one reading.
+- The folds genuinely disagree, and not by a little: fold 1 says +0.0046 and
+  fold 2 says -0.0032. Pooling to +0.0014 averages a real conflict rather than
+  resolving it.
+- **We are now choosing a fitted parameter using public feedback**, which is
+  precisely the mechanism behind public-to-private collapse. The transfer table
+  already showed the most heavily fitted change we made -- partial prior
+  matching -- losing its entire validation edge on public. Tuning alpha on
+  public invites the same failure one level down, against a private split of
+  about 3,838 customers that nothing has been fitted to.
+
+### Why carrying both is the right response
+The selection is **v4_alpha075 and v4_hybrid (alpha 0.5)**. That hedges the
+disagreement directly: if alpha 0.75's public edge is real it is the better pick,
+and if it is noise then alpha 0.5 -- the value fold 2 preferred and the default
+the pre-registration protected -- is still selected. Two picks spanning the one
+parameter the evidence is split on is a better use of them than two picks
+differing in something the evidence agrees about.
+
+Note also what block I established about this parameter: alpha is not a
+staleness correction. Full matching (alpha = 1.0) gives back the entire gain even
+though it hits the target mix most precisely, and alpha 1.0 scores 0.5063/0.5088
+on validation, below both 0.5 and 0.75. So the useful range is interior and
+fairly flat between 0.5 and 0.75, which is consistent with the three readings
+landing within 0.006 F1 of each other in both directions.
+
+### Scoring constants reconfirmed
+alpha 0.75 is the second public row published with full-precision components, and
+the formula reproduces it with residual 1e-9 (rounding of the last digit):
+`0.4*0.535300706 + 0.3*(1 - 0.593163991/0.74) + 0.3*(1 - 0.723339664/0.816)
+= 0.307714694` against a reported 0.307714693. Two exact rows now, both clean.
+
+### Corrected figure and the resubmission result
+`v4_alpha075`'s validation score is **0.29095** (folds 0.29343 / 0.28847), not
+0.29139 as first written -- recomputed from its fold F1s (0.5141 / 0.5137) with
+v3's regressions. Against v4_hybrid's 0.29067 that is +0.00028 on validation,
+beside +0.00256 on public. The validation and public readings agree in sign and
+differ by an order of magnitude in size, which is what a genuinely marginal
+parameter looks like.
+
+The v4_hybrid resubmission closed the 1-ULP question. `Bb8Js9A2` (CLV copied
+bit-for-bit from v3) and `rjQUYHF9` (CLV from the recipe's own hurdle fit) differ
+by 4.4e-16 on some rows and scored **identically to all nine reported digits**,
+every component included. The two per-seed summation lineages are therefore
+indistinguishable to the metric, and the resubmission bought byte-provenance
+rather than score -- which is what was predicted before it was sent.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

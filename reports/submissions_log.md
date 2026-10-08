@@ -10,9 +10,9 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | 2026-10-06 | submission_v3.csv | bag20 regressions + prior matching to the 2025-09-01 mix (4 large classes) at alpha 0.5 | 0.5996 | 0.7451 | 0.5173 | 0.3031 | score 0.28929; best candidate |
 
 | 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | not submitted | score 0.28796; second-pick candidate, hedge against fitted rules |
-| 2026-10-08 | submission_diag_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 | 0.5996 | 0.7451 | - | not submitted | **diagnostic, not for selection**; the folds disagreed on alpha |
+| 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected**. Folds disagreed on alpha; see notes |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, 20 seeds, prior matching alpha 0.5 | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate |
-| 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted 8 Oct, Zindi ID Bb8Js9A2, rank 49. Public 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664. validation 0.29068. **Selected final pick 1.** This was the pre-promotion file (v3-lineage CLV); see the note below |
+| 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and is the **selected** one. validation 0.29068 |
 | 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude) | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086) |
 
 | 2026-10-06 | submission_v2_bag20.csv | 20-seed bag (42-61), monthly, hurdle regressions | 0.5996 | 0.7451 | 0.5045 | 0.2987 | score 0.28502; flip rate 1.42% vs 2.91% for 5-seed |
@@ -82,14 +82,26 @@ remains the best candidate at 0.28929.
 
 ## Final picks and the v4_hybrid lineage
 
-**Selected on Zindi: `submission_v4_hybrid.csv` and `submission_v3.csv`.**
+**Selected on Zindi: `A37bufRz` (v4_alpha075) and `rjQUYHF9` (v4_hybrid).**
+The two picks differ only in the prior-matching damping exponent, which is the
+one parameter the evidence is split on.
 
-| file | public | validation | status |
-| --- | --- | --- | --- |
-| `submission_v4_hybrid.csv` | **0.305152978** (rank 49, ID Bb8Js9A2) | 0.29068 | selected |
-| `submission_v3.csv` | 0.3031 | 0.28929 | selected |
-| `submission_v4_lags.csv` | 0.3045 | 0.29119 | submitted, not selected |
-| `submission_v4_simple.csv` | pending | 0.28796 | hedge |
+| file | Zindi ID | public | validation | status |
+| --- | --- | --- | --- | --- |
+| `submission_v4_alpha075.csv` | **A37bufRz** | **0.307714693** (rank 37) | 0.29139* | **selected** |
+| `submission_v4_hybrid.csv` | **rjQUYHF9** | **0.305152978** (rank 49) | 0.29068 | **selected** |
+| `submission_v4_hybrid.csv` (pre-promotion) | Bb8Js9A2 | 0.305152978 | 0.29068 | superseded |
+| `submission_v4_lags.csv` | - | 0.3045 | 0.29119 | submitted |
+| `submission_v3.csv` | - | 0.3031 | 0.28929 | submitted |
+| `submission_v4_simple.csv` | - | not submitted | 0.28796 | hedge, unused |
+
+\* the folds disagree about alpha 0.75: +0.0046 F1 on fold 1, -0.0032 on fold 2.
+
+**The resubmission confirmed the 1-ULP prediction.** Bb8Js9A2 (CLV copied from
+v3) and rjQUYHF9 (CLV from the recipe's own hurdle fit) differ by 4.4e-16 on some
+rows and scored **identically to all nine reported digits**, including every
+component. So the two summation lineages are indistinguishable to the metric, and
+the resubmission bought byte-provenance rather than score.
 
 **Two lineages of the same file.** The version submitted on 8 Oct was built by
 composition: the lag classifier's labels with CLV columns copied bit-for-bit from

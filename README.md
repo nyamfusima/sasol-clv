@@ -10,15 +10,25 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | --- | --- | --- | --- |
 | single-seed baseline (`src/baseline.py`) | 0.28164 | 0.2974 | reference |
 | v2 — 5-seed bagging + hurdle regressions | 0.28553 | 0.2991 | |
-| v3 — + partial prior matching | 0.28929 | 0.3031 | **selected pick 2** |
+| v3 — + partial prior matching | 0.28929 | 0.3031 | submitted |
 | v4_lags — + lag series on all three models | 0.29119 | 0.3045 | submitted, not selected |
-| **v4_hybrid — lag classifier, v3 regressions** | 0.29068 | **0.3052** | **selected pick 1**, rank 49 |
+| v4_hybrid — lag classifier, v3 regressions, α 0.5 | 0.29068 | 0.3052 | **selected**, rank 49 |
+| **v4_alpha075 — same, α 0.75** | 0.29095\* | **0.3077** | **selected**, rank 37 |
 | v4_simple — lag classifier, Fuel ×1.25 rule | 0.28796 | not submitted | hedge |
 
 Validation is the mean of two time-based folds; see
-[Validation protocol](#validation-protocol). `v4_hybrid` scored **0.305152978**
-on the public board (F1 0.528896416, RMSE fuel 0.593163991, RMSE non-fuel
-0.723339664) at rank 49, and is one of the two selected picks alongside `v3`.
+[Validation protocol](#validation-protocol).
+
+\* `v4_alpha075`'s validation figure is the mean of two folds that **disagree
+about it**: α 0.75 is +0.0046 F1 on fold 1 and −0.0032 on fold 2. It is carried
+as a selected pick because the public board, used as a pre-registered third
+reading, favoured it by +0.0064 F1 (0.3077 against 0.3052, rank 37 against 49)
+with the regressions byte-identical. Pooled across all three readings by sample
+size the effect is **+0.0014 F1**, worth +0.00028 of validation score and
++0.00256 of public score. The two selected picks therefore span the one
+parameter the evidence is split on, rather than agreeing with each other — see
+[`reports/notes.md`](reports/notes.md) for why that is deliberate and what it
+risks.
 
 **What transferred to the public board and what did not.** Six sweeps and about
 55 variants produced four kept changes. Comparing each one's validation delta
@@ -63,10 +73,11 @@ validation score, validates the output before writing, and reports its runtime.
 
 | recipe | seeds | classifier lags | regression lags | decision rule | output |
 | --- | --- | --- | --- | --- | --- |
-| **v4_hybrid** | 42–61 | yes | no | prior matching, α 0.5 | primary candidate |
+| **v4_hybrid** | 42–61 | yes | no | prior matching, α 0.5 | selected |
+| **v4_alpha075** | 42–61 | yes | no | prior matching, α 0.75 | selected |
 | v4_lags | 42–61 | yes | yes | prior matching, α 0.5 | |
 | v4_simple | 42–61 | yes | no | Fuel ×1.25 | hedge |
-| v3 | 42–61 | no | no | prior matching, α 0.5 | final pick 2 |
+| v3 | 42–61 | no | no | prior matching, α 0.5 | |
 | v2 | 42–46 | no | no | argmax | |
 
 The submission path needs only **pandas, numpy, scikit-learn and lightgbm**.
