@@ -10,15 +10,15 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | --- | --- | --- | --- |
 | single-seed baseline (`src/baseline.py`) | 0.28164 | 0.2974 | reference |
 | v2 — 5-seed bagging + hurdle regressions | 0.28553 | 0.2991 | |
-| v3 — + partial prior matching | 0.28929 | 0.3031 | **final pick 2** |
-| v4_lags — + lag series on all three models | 0.29119 | **0.3045** | rank 49 |
-| **v4_hybrid — lag classifier, v3 regressions** | 0.29068 | **0.30515** (inferred) | **primary** |
+| v3 — + partial prior matching | 0.28929 | 0.3031 | **selected pick 2** |
+| v4_lags — + lag series on all three models | 0.29119 | 0.3045 | submitted, not selected |
+| **v4_hybrid — lag classifier, v3 regressions** | 0.29068 | **0.3052** | **selected pick 1**, rank 49 |
 | v4_simple — lag classifier, Fuel ×1.25 rule | 0.28796 | not submitted | hedge |
 
 Validation is the mean of two time-based folds; see
-[Validation protocol](#validation-protocol). `v4_hybrid`'s public score is
-inferred rather than measured: its labels are bit-identical to `v4_lags` and its
-CLV columns match `v3` to within 1 ULP, so both public components are known.
+[Validation protocol](#validation-protocol). `v4_hybrid` scored **0.305152978**
+on the public board (F1 0.528896416, RMSE fuel 0.593163991, RMSE non-fuel
+0.723339664) at rank 49, and is one of the two selected picks alongside `v3`.
 
 **What transferred to the public board and what did not.** Six sweeps and about
 55 variants produced four kept changes. Comparing each one's validation delta
@@ -172,7 +172,7 @@ scored:
 Fold 2 is the baseline's original split, so its numbers are directly comparable
 with `src/baseline.py`.
 
-### Scoring formula — inferred constants, confirmed mechanism
+### Scoring formula — unpublished constants, verified exactly
 
 ```
 Score = 0.4*F1 + 0.3*(1 - RMSE_fuel/0.74) + 0.3*(1 - RMSE_nonfuel/0.816)
@@ -184,18 +184,26 @@ Leaderboard Public Score Discrepancy"* (25 Sep 2026), and the Info page now
 reads "normalised RMSE … normalised Weighted F1". The weights (0.3 / 0.3 / 0.4)
 are official.
 
-**The two constants are still inferred.** 0.74 and 0.816 have not been
-officially published. Three things support them:
+**The two constants are unpublished but verified exact.** 0.74 and 0.816 have
+never been officially stated. Four things establish them:
 
-- they were recovered here by fitting four public leaderboard rows, which they
-  reproduce to nine decimal places;
-- another participant in that same thread independently backed out the same two
-  values;
-- under Zindi's multi-metric policy the normalisers are typically the starter
-  notebook's scores, which is consistent with the magnitudes.
+- `submission_v4_hybrid.csv` is reported with full-precision components, and the
+  formula reproduces its public score with residual **0.000000000**:
+  `0.4*0.528896416 + 0.3*(1 - 0.593163991/0.74) + 0.3*(1 - 0.723339664/0.816)
+  = 0.305152978`. Solving for a common scale factor on the normalisers gives
+  k = 1.000000000;
+- the three constant-label probe submissions imply a single shared regression
+  term to within 0.00018 of each other, which only happens if both the weights
+  and the normalisers are right;
+- they reproduce six further public rows to within 0.00006, the residual being
+  entirely explained by those rows publishing components to four decimals;
+- another participant in the staff thread independently recovered the same two
+  values, and under Zindi's multi-metric policy the normalisers are typically
+  the starter notebook's scores, consistent with the magnitudes.
 
-That is strong but not authoritative, so the formula is used for **local model
-selection only** and never as a claim about the official metric. Every decision
+So the arithmetic is settled even though the values are not official. The
+formula is still used for **local model selection only** and never asserted as
+the official metric. Every decision
 is additionally reported per component (F1, RMSE fuel, RMSE non-fuel) in
 `reports/notes.md`, so no conclusion in this repo depends on the two constants
 being exactly right. Blocks H and I are the clearest cases: they hold the

@@ -12,7 +12,7 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | not submitted | score 0.28796; second-pick candidate, hedge against fitted rules |
 | 2026-10-08 | submission_diag_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 | 0.5996 | 0.7451 | - | not submitted | **diagnostic, not for selection**; the folds disagreed on alpha |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, 20 seeds, prior matching alpha 0.5 | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate |
-| 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | *0.30515 inferred* | score 0.29068; labels identical to v4_lags and CLV identical to v3, so its public score follows exactly; **+0.00065 over v4_lags** |
+| 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted 8 Oct, Zindi ID Bb8Js9A2, rank 49. Public 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664. validation 0.29068. **Selected final pick 1.** This was the pre-promotion file (v3-lineage CLV); see the note below |
 | 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude) | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086) |
 
 | 2026-10-06 | submission_v2_bag20.csv | 20-seed bag (42-61), monthly, hurdle regressions | 0.5996 | 0.7451 | 0.5045 | 0.2987 | score 0.28502; flip rate 1.42% vs 2.91% for 5-seed |
@@ -79,6 +79,47 @@ remains the best candidate at 0.28929.
 | d two-stage | 0.4939 | 0.4972 | 0.4956 | dropped |
 | e rule-derived | 0.3842 | 0.3846 | 0.3844 | dropped |
 | f class-prior (held-out) | 0.4969 | 0.5053 | 0.5011 | kept, +0.0013 |
+
+## Final picks and the v4_hybrid lineage
+
+**Selected on Zindi: `submission_v4_hybrid.csv` and `submission_v3.csv`.**
+
+| file | public | validation | status |
+| --- | --- | --- | --- |
+| `submission_v4_hybrid.csv` | **0.305152978** (rank 49, ID Bb8Js9A2) | 0.29068 | selected |
+| `submission_v3.csv` | 0.3031 | 0.28929 | selected |
+| `submission_v4_lags.csv` | 0.3045 | 0.29119 | submitted, not selected |
+| `submission_v4_simple.csv` | pending | 0.28796 | hedge |
+
+**Two lineages of the same file.** The version submitted on 8 Oct was built by
+composition: the lag classifier's labels with CLV columns copied bit-for-bit from
+`submission_v3.csv`. The version now committed is the output of
+`--recipe v4_hybrid`, whose CLV comes from its own hurdle fit and differs from the
+v3 lineage by exactly 1 ULP (4.4e-16) on some rows, because the two code paths
+sum per-seed predictions in different orders.
+
+A 4.4e-16 shift in individual predictions moves an RMSE by about 1e-16 and the
+score by less than that, so the resubmission aligns provenance rather than
+changing anything measurable. Its public score should match 0.305152978 to every
+reported digit.
+
+### The scoring formula is now confirmed exactly
+v4_hybrid is the first public row reported with full-precision components, and it
+settles the question:
+
+    0.4*0.528896416 + 0.3*(1 - 0.593163991/0.74) + 0.3*(1 - 0.723339664/0.816)
+      = 0.305152978
+
+Residual **0.000000000**. Solving for a common scale factor on both normalisers
+gives k = 1.000000000. So **0.74 and 0.816 are exact**, not approximations. The
++/-0.00006 residuals seen on the six earlier rows were entirely an artefact of
+those rows' components being published to four decimals.
+
+This also vindicates the inference that identified v4_hybrid as worth submitting:
+because its labels were bit-identical to `v4_lags` and its CLV bit-identical to
+`v3`, its public score had to be v4_lags' F1 term plus v3's regression terms. The
+predicted 0.30515 against a measured 0.305152978 differed only by 4-decimal input
+rounding.
 
 ## Validation against public, per kept change
 

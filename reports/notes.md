@@ -1539,6 +1539,37 @@ the true time at 53 min by subtracting the apparent jump, and the measured value
 is 80 min. The subtraction was the wrong instrument -- a monotonic measurement in
 a clean environment is the right one.
 
+## Correction to the record (8 Oct): v4_hybrid was submitted and is selected
+
+Earlier entries described `submission_v4_hybrid.csv` as never submitted with an
+inferred public score, and the final picks as v4_lags and v3. Both were wrong.
+
+- `submission_v4_hybrid.csv` **was** submitted on 8 Oct: public **0.305152978**,
+  components F1 0.528896416 / RMSE fuel 0.593163991 / RMSE non-fuel 0.723339664,
+  rank 49, Zindi ID Bb8Js9A2.
+- The selected picks are **v4_hybrid and v3**, not v4_lags and v3.
+- The submitted version was the pre-promotion file (CLV copied bit-for-bit from
+  v3). The committed version is the `--recipe v4_hybrid` output, whose CLV
+  differs by 1 ULP because the two code paths sum per-seed predictions in
+  different orders. A resubmission of the recipe output is in flight so the
+  selected file matches what the documented recipe produces; the score should be
+  identical to every reported digit, since 4.4e-16 on individual predictions
+  moves an RMSE by about 1e-16.
+
+### The scoring constants are exact, not approximate
+This is the first public row published with full-precision components, and our
+formula reproduces it with residual **0.000000000**; solving for a common scale
+factor on the normalisers gives k = 1.000000000. So 0.74 and 0.816 are exact.
+The +/-0.00006 residuals recorded earlier against six public rows were an
+artefact of those rows being published to four decimals, not evidence that the
+constants were off. The README's "inferred constants, confirmed mechanism"
+framing can now be strengthened: the mechanism was confirmed by Zindi staff and
+the constants are confirmed by exact arithmetic.
+
+I also briefly mis-stated this in working: a hand calculation suggested a
+systematic 7e-5 residual, which came from my own division error, not from the
+formula. The computed check is the authority.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
