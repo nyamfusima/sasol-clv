@@ -1775,6 +1775,136 @@ clearly extends beyond 0.75 on **both** folds. It does not:
 
 Both folds decline beyond 0.75, so nothing was written.
 
+## Sweep 7, block E1: expected-F1 decoding (8 Oct)
+
+A parameter-free decision rule. Instead of weighting classes, choose the
+assignment that maximises the model's OWN expected weighted F1,
+
+    sum_c (n_c/N) * 2*TP_c / (n_c + m_c)
+
+with m_c the rows assigned to c and TP_c the sum of P[i,c] over them. True labels
+never enter the rule, so there is nothing to fit. Run on the cached 20-seed lag
+classifier probabilities for both folds; no refits.
+
+### Results
+| rule | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| argmax | 0.4966 | 0.5051 | 0.5009 |
+| prior matching, alpha 0.5 | 0.5095 | **0.5169** | 0.5132 |
+| prior matching, alpha 0.75 | **0.5141** | 0.5137 | **0.5139** |
+| expected-F1, n_c model-implied | 0.5090 | 0.5145 | 0.5118 |
+| expected-F1, n_c = stale mix | 0.5113 | 0.5126 | 0.5119 |
+| expected-F1, n_c averaged | 0.5106 | 0.5133 | 0.5119 |
+
+**Dropped on the pre-stated keep rule.** The bar was mean F1 at least alpha
+0.75's 0.5139 and neither fold more than 0.001 below the better of alpha 0.5 /
+0.75 on that fold (0.5141 / 0.5169). All three variants miss the mean by
+0.0020-0.0021 and both fold conditions.
+
+### It recovers 85% of the gain with no parameter
+That is the result worth keeping. The three choices of n_c are
+indistinguishable from each other (0.5118-0.5119, a 0.0001 spread) and all sit
+about four fifths of the way from argmax to the best fitted rule:
+
+| variant | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| model-implied | 71% | 109% | 84% |
+| stale mix | 84% | 86% | 85% |
+| averaged | 80% | 95% | 85% |
+
+The denominator is the mean argmax-to-alpha-0.75 gap, 0.50085 to 0.51392, which
+is +0.01307.
+
+So the bulk of what prior matching buys is not information about the target mix
+at all -- it is the generic fact that **weighted F1 rewards predicting rare
+classes more often than argmax does**, and a rule derived from the metric alone
+finds most of it. The remaining 0.002 is the part that needs the stale label
+mix and a damping exponent, and it is exactly the part the two folds disagree
+about.
+
+### The optimiser is not the limitation
+The fixed point was checked against an exact one-row-at-a-time coordinate ascent
+on the same objective:
+
+| variant | fold | sweeps | objective | rows moved by exact ascent | after |
+| --- | --- | --- | --- | --- | --- |
+| model-implied | 2025-06 | 29 | 0.536186 | 7 | 0.536191 |
+| model-implied | 2025-09 | 200 (cap) | 0.547413 | 45 | 0.547499 |
+| stale mix | 2025-06 | 24 | 0.527872 | 41 | 0.527951 |
+| stale mix | 2025-09 | 200 (cap) | 0.541281 | 63 | 0.541462 |
+| averaged | 2025-06 | 29 | 0.532323 | 20 | 0.532363 |
+| averaged | 2025-09 | 200 (cap) | 0.544398 | 69 | 0.544561 |
+
+The ascent never lowered the objective, and it raised it by at most 0.00018 by
+moving at most 69 of 5,238 rows. Fold 2025-09 did not reach an exact fixed point
+in 200 sweeps in any variant -- it cycles, the damping engages and the best-seen
+assignment is returned -- but since exact ascent from that point finds under
+0.0002, the cap is not why the rule loses. **The objective is being maximised
+properly; it is simply not the right objective.** Expected F1 is computed from
+the model's own probabilities, so maximising it inherits their miscalibration.
+Note the objective values differ by 0.008 across the three n_c choices while
+their real F1 differs by 0.0001: the objective's level carries no information
+about realised F1.
+
+### The two rules move different degrees of freedom
+Effective per-class multipliers at convergence (fold 2025-09), against the IPF
+weights. Both columns are normalised by their geometric mean -- `ipf()` does this
+internally because argmax is scale-invariant -- so they are directly comparable.
+
+| class | a_c | IPF^0.5 | IPF^0.75 |
+| --- | --- | --- | --- |
+| Stable * | 0.693 | 0.564 | 0.423 |
+| Inactivity * | 0.742 | 0.490 | 0.343 |
+| Existing-category growth: Fuel * | 0.729 | 0.592 | 0.455 |
+| Existing-category growth: Other * | 0.732 | 0.816 | 0.737 |
+| the 13 unmatched classes | 0.815 to 1.381 | 1.168 | 1.168 |
+
+(* the four matched classes.) Relative spread across those four: **a_c 0.069
+against IPF 0.529 at alpha 0.5 and 0.804 at alpha 0.75.** The b_c offsets are at
+most 0.00007, so the decoding rule, though formally affine, is effectively
+multiplicative.
+
+The structure is almost complementary. Expected-F1 decoding applies a **nearly
+flat** discount to the four large classes and spends all its variation on the 13
+rare ones (0.82 to 1.38), where IPF holds every unmatched class at one value by
+construction. IPF does the reverse. That is why they land close in score by
+different routes, and it suggests the two are not substitutes -- but combining
+them means re-introducing alpha, so it is not a parameter-free option.
+
+### A closer class mix again fails to mean a better F1
+Predicted shares of the four large classes on fold 2025-09, with the L1 distance
+to the true mix:
+
+| rule | Stable | Inactivity | Fuel | Other | L1 to truth | fold-2 F1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| TRUE | 0.268 | 0.274 | 0.274 | 0.053 | - | - |
+| argmax | 0.394 | 0.309 | 0.235 | 0.047 | 0.206 | 0.5051 |
+| alpha 0.5 | 0.354 | 0.283 | 0.254 | 0.057 | 0.119 | **0.5169** |
+| alpha 0.75 | 0.330 | 0.270 | 0.262 | 0.057 | 0.082 | 0.5137 |
+| expected-F1, model-implied | 0.328 | 0.270 | 0.280 | 0.056 | **0.073** | 0.5145 |
+| expected-F1, stale mix | 0.336 | 0.266 | 0.279 | 0.058 | 0.086 | 0.5126 |
+| expected-F1, averaged | 0.333 | 0.269 | 0.279 | 0.057 | 0.079 | 0.5133 |
+
+The rule with the **closest** mix to truth (model-implied, 0.073) is beaten on
+that fold by the rule with the **second-worst** mix (alpha 0.5, 0.119). Across
+the five non-argmax rules the rank correlation between mix distance and fold-2
+F1 is **0.10** -- nil, and the sign is the wrong way. Mix distance separates
+argmax from everything else and then stops being informative.
+
+This is the third independent confirmation that alpha is not a staleness
+correction: block I found full matching (alpha 1.0) gives the entire gain back
+despite hitting the target mix most precisely; the fine grid found the optimum
+interior and flat; and now a rule that hits the Fuel share almost exactly
+(0.280 against a true 0.274, where alpha 0.75 sits at 0.262) still scores lower.
+Whatever the damped weights are doing, it is not getting the marginal
+distribution right.
+
+### Verdict
+Dropped. Nothing written, no recipe added. The transferable finding is that
+**85% of the decision-rule gain is available with no fitted parameter at all**,
+which bounds how much of our 0.0131 argmax-to-alpha improvement could plausibly
+be fragile: at most the last 0.0020.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
