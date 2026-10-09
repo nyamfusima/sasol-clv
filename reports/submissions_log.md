@@ -11,9 +11,9 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 
 | 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | **0.3049** | Zindi ID **8ii1ZeJp**. Public 0.304851105 = F1 0.528141734 / rmse 0.593163991 / 0.723339664. Pre-registered bands: >0.5353 would have replaced the alpha 0.5 pick, 0.515-0.5353 keeps the pair. Landed mid-band at 0.5281, so **selection unchanged** |
 | 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected**. Folds disagreed on alpha; see notes. `submission_diag_alpha075.csv` and `submission_v4_alpha075.csv` are the SAME file, kept under both names so the pre-registration history stays readable; `--recipe v4_alpha075 --skip-validation` reproduces it byte-identically |
-| 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, 20 seeds, prior matching alpha 0.5 | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate |
+| 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, prior matching alpha 0.5. **Classifier 20 seeds; CLV columns were built at 5 seeds, not 20** -- a frozen default argument swallowed the seed override (found 9 Oct, see notes). Re-measured at matched seeds the difference is +0.00021 in score, so the row stands | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate at the time, not selected |
 | 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and is the **selected** one. validation 0.29068 |
-| 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude) | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086) |
+| 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude). CLV built at **5 seeds, not 20** -- same frozen-default bug | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086 at 5 seeds) |
 
 | 2026-10-06 | submission_v2_bag20.csv | 20-seed bag (42-61), monthly, hurdle regressions | 0.5996 | 0.7451 | 0.5045 | 0.2987 | score 0.28502; flip rate 1.42% vs 2.91% for 5-seed |
 | 2026-10-06 | submission_v2_prior.csv | bag20 + Fuel-growth prior x1.25 (cross-fold validated) | 0.5996 | 0.7451 | 0.5096 | 0.3035 | score 0.28667; best candidate |
@@ -168,6 +168,22 @@ pre-registered third reading rather than more validation folds.
 All three rows carry full-precision components and the formula reproduces each to
 about 1e-9: 0.304851105, 0.305152978 and 0.307714694 against reported
 0.304851105, 0.305152978 and 0.307714693. 0.74 and 0.816 are settled.
+
+### Seed-count correction (9 Oct)
+A frozen `seeds=SEEDS` default argument meant `W.SEEDS = list(CONFIRM)` never
+took effect, so every `reg_rmses` call and the CLV columns of
+`submission_v4_lags.csv` and `submission_diag_r1_bundle.csv` ran at 5 seeds while
+printing and logging 20. Fixed at the root in `src/sweep2.py`.
+
+**No selected pick is affected.** `make_submission.py` takes `seeds` as a
+required positional, and both selected files reproduce byte-identically from it,
+so their CLV columns are genuine 20-seed. `V3_RF`/`V3_RN` come from
+`stability.py`, whose `bag20` entry matches the recorded constants to eight
+decimal places. Every classifier number passed seeds explicitly.
+
+Re-measured at matched seed counts, lag-feature regressions score 0.29118 at 5
+seeds and 0.29139 at 20 against a 0.29067 base, so the seed effect is **+0.00021**
+-- a documentation error rather than a substantive one. No verdict changes.
 
 ### Recipe reproduction, verified byte-for-byte
 Every candidate is reproducible from the raw CSVs through `make_submission.py`,

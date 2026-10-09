@@ -958,8 +958,15 @@ without it, "identical to bag20" was not true of the files on disk.
 
 Seed policy: variants are screened at 5 seeds (42-46) and anything promising is
 re-measured at 20 (42-61). Seed sd is 0.00020 against a 0.0015 bar, so screening
-cannot hide a passing effect, and it cuts compute about fourfold. Every reported
-keep decision is at 20 seeds.
+cannot hide a passing effect, and it cuts compute about fourfold.
+
+**Correction (9 Oct).** This section originally claimed "every reported keep
+decision is at 20 seeds". That was true of the classifier tracks and false of the
+regression tracks: `W.SEEDS = list(CONFIRM)` could not override a frozen
+`seeds=SEEDS` default argument, so every `reg_rmses` call ran at 5 seeds. See
+"A seed bug found in sweep 8" below for the fix and the full blast radius. No
+kept decision changes; the rows below marked 20-seed on the regression side are
+5-seed measurements.
 
 Incumbent: v3 = hurdle regressions (bag20) + partial prior matching at alpha 0.5,
 score 0.28929, F1 0.5022 / 0.5173, rmse 0.5969 / 0.5996 and 0.7350 / 0.7451.
@@ -990,7 +997,10 @@ against +0.00081), which reproduces the B3 finding: CatBoost's magnitude model i
 genuinely better on positive rows rather than merely decorrelated, so averaging
 dilutes it.
 
-20-seed confirmation of the better bundle against v3:
+Confirmation of the better bundle against v3 -- labelled 20-seed at the time,
+actually **5-seed** (see the sweep 8 seed-bug section); v3's own numbers in
+this table are genuine 20-seed, so this row compares a 5-seed challenger
+against a 20-seed incumbent:
 
 | | fold 1 score | fold 2 score | mean | gain |
 | --- | --- | --- | --- | --- |
@@ -998,7 +1008,10 @@ dilutes it.
 | bundle f3f4 + catboost mag | 0.290410 | 0.289893 | 0.29015 | +0.00086 |
 
 **Dropped**: +0.00086 is well under the bar, and fold 2 is down by 0.000012 --
-essentially flat, but it fails the both-folds condition outright. Fold 1 alone
+essentially flat, but it fails the both-folds condition outright. The seed
+mislabelling does not rescue it: the both-folds failure is intrinsic, and a
+20-seed re-measurement would have to move the mean by +0.00064 and flip fold 2
+to pass. Fold 1 alone
 gains +0.00174, so the entire mean gain comes from one fold, which is exactly
 the asymmetry the both-folds rule exists to catch.
 
@@ -2040,6 +2053,250 @@ worthwhile, so nothing was written and no diagnostic file was produced.
 Three for three negative, and the recipe table is unchanged. Running total:
 **four kept changes out of 60 variants across seven sweeps.** The two selected
 picks (`v4_alpha075`, `v4_hybrid`) are untouched.
+
+## Sweep 8, renewal (fill-rhythm) features (9 Oct) -- all dropped
+
+The premise: fuel is a refill good, so a customer who fills every 11 days makes
+a predictable number of fills next quarter, and one fill more or fewer decides a
+label the official rule defines in rands. Three blocks, built in
+[`src/features5.py`](../src/features5.py) from rows strictly before each cutoff:
+r1 fuel fills, r2 all qualifying baskets plus a no-purchase estimate, r3
+calendar phase. Nothing reads the outcome window except its calendar LENGTH,
+which is known at prediction time.
+
+### The sanity gate passed
+Run before any model, as a stop condition. True Fuel-growth rate by (projected
+minus previous) fills, among customers with 3-12 fuel fills last quarter and gap
+CV below 0.5 -- pure arithmetic, no model:
+
+| bucket | fold 2025-06 n | rate | lift | fold 2025-09 n | rate | lift |
+| --- | --- | --- | --- | --- | --- | --- |
+| <= -1 | 19 | 0.053 | 0.22 | 18 | 0.111 | 0.39 |
+| 0 | 25 | 0.160 | 0.67 | 20 | 0.150 | 0.53 |
+| >= +1 | 60 | 0.333 | 1.39 | 50 | 0.400 | 1.41 |
+
+Monotone on both folds, and it replicates with the last-6-fills gap (+0.184 and
++0.323 spread). The strict filter covers only ~2% of customers, but that is the
+filter, not the features: **CV < 0.5 is the binding clause** (5.1-5.6% of
+customers; median gap CV is about 1.0, which is what a memoryless process looks
+like). The projection itself is defined for **97%**, and the separation survives
+on the full population at 0.137 / 0.219 / 0.289 and 0.143 / 0.256 / 0.300, still
+monotone, with ~18% of rows in the two informative buckets.
+
+Single-feature AUC for Fuel growth puts the strength in the **ratio** forms, not
+the difference: `r1_projratio_med` 0.644 / 0.637 and `r1_spend_ratio_med` 0.641 /
+0.639, against `r1_projdiff_med` 0.543 / 0.536 and `r1_gap_med` 0.554 / 0.554.
+The arithmetic reconstruction of the official rule is high-recall and
+low-precision -- `r1_hits_line_med` fires on 68% of customers with precision 0.31
+against a 0.26 base rate -- because projected fills times median rand clears the
+1.25x line too easily.
+
+### Classifier results, both alphas, against a lags-only reference
+5-seed reference: alpha 0.5 mean 0.5117, alpha 0.75 mean 0.5118.
+
+| block | cols | a0.5 mean | gain | a0.75 mean | gain |
+| --- | --- | --- | --- | --- | --- |
+| r1 fuel renewal | +34 | 0.5124 | +0.00028 | 0.5109 | -0.00034 |
+| r2 all baskets | +23 | 0.5108 | -0.00036 | 0.5118 | -0.00000 |
+| **r3 calendar phase** | +9 | 0.5120 | +0.00010 | **0.5149** | **+0.00124** |
+| combo r1+r3 | +43 | 0.5112 | -0.00021 | 0.5120 | +0.00010 |
+
+r3 was the only block worth confirming: at alpha 0.75 it beat the reference on
+both folds and failed only the magnitude bar, by 0.00026.
+
+**The 20-seed confirmation dissolved it.** Reference alpha 0.5 mean 0.5132,
+alpha 0.75 mean 0.5139 (the cached 20-seed lags-only classifier, not refitted):
+
+| | fold 2025-06 | fold 2025-09 | mean | gain |
+| --- | --- | --- | --- | --- |
+| r3, alpha 0.5 | 0.5105 | 0.5162 | 0.5134 | +0.00006 |
+| r3, alpha 0.75 | 0.5147 | 0.5148 | 0.5147 | +0.00033 |
+
+The screen's +0.00124 was mostly **reference noise, not signal**: at 5 seeds the
+lags-only reference scored 0.5116 on fold 1 at alpha 0.75, against 0.5141 at 20
+seeds. r3's own fold-1 value barely moved (0.5157 to 0.5147); the reference moved
+0.0025. This is the clearest instance in the project of a screen gain being an
+artefact of the baseline rather than the change, and the two-stage protocol
+catching it.
+
+The combination is also **sub-additive to the point of being negative**: r1 and
+r3 each nominally positive at their better alpha, together -0.00021 at alpha 0.5.
+43 mostly redundant columns dilute rather than accumulate, reproducing sweep 5's
+sub-additivity finding on the regression side.
+
+### Why r1 failed: it is a compression of the lag series, not new information
+Binary Fuel-growth target, 1 seed, AUC on the held-out fold:
+
+| features | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| lag series only (62 cols) | 0.7292 | 0.7264 | 0.7278 |
+| **r1 renewal only (34 cols)** | 0.7324 | 0.7247 | **0.7286** |
+| lags + r1 (96 cols) | 0.7329 | 0.7268 | 0.7298 |
+| r1 adds over lags | +0.0037 | +0.0004 | **+0.0021** |
+
+34 renewal columns reproduce the discrimination of the whole 62-column lag
+series, and their union adds only +0.0021 AUC. The renewal construction is a
+**more compact encoding of signal the lags already carry**, which is a real
+result about representation and a useless one for scoring: +0.0021 binary AUC is
+consistent with the +0.00028 weighted F1 r1 actually delivered. This is the same
+verdict as sweep 6's six "new information" blocks, now with a direct measurement
+of the redundancy rather than an inference from the score.
+
+### r3's gain had a second explanation, pre-registered before it was measured
+Of r3's 9 columns, only 2 are per customer. The other 7 are identical for every
+customer at a cutoff, take **9 distinct values across the 17 cutoffs**, and pair
+the test cutoff uniquely with **2024-12-01** -- the same calendar month:
+
+| | eom_prev | eom_out | eom_diff | days_diff |
+| --- | --- | --- | --- | --- |
+| 2024-12-01 | 22 | 21 | -1 | -1 |
+| **2025-12-01 (test)** | **22** | **21** | **-1** | **-1** |
+
+So a tree can use them to identify the cutoff and specialise on one December
+window rather than learn anything about renewal. A decomposition into r3a
+(customer shares) and r3b (window counts) was implemented to separate the two,
+and then **not run**: the 20-seed gain is +0.00033, so there is nothing left to
+decompose. Recorded because the decomposition exists in
+[`src/features5.py`](../src/features5.py) and a reviewer will see it unused.
+
+Design wart worth owning: the three month-start (`bom`) columns are constant
+across all 17 cutoffs and cannot be split on at all. They were dead weight in
+every r3 run.
+
+### The population is drifting away from this block's premise
+Eligibility is "3+ baskets ever", so the cohort accumulates customers who
+qualify once and go quiet:
+
+| | 2024-06 | 2025-03 | 2025-09 | 2025-12 (test) |
+| --- | --- | --- | --- | --- |
+| eligible customers | 2,745 | 4,649 | 5,238 | 5,488 |
+| zero fuel fills in the prior quarter | 0.5% | 16.5% | 26.1% | **28.2%** |
+| median prior-quarter fills | 8 | 5 | 4 | 4 |
+| median gap CV | 0.76 | 0.96 | 1.02 | **1.05** |
+
+By the test cutoff **28% of customers have no fuel fill in the prior quarter at
+all** and the median customer's gap CV is 1.05. A fill-rhythm feature set is
+structurally limited on that population and the trend runs against it.
+
+The labels trend with it: Inactivity 0.072 -> 0.274 over the 16 cutoffs
+(+0.176/year), Stable 0.365 -> 0.268 (-0.104/year), Fuel roughly flat
+(-0.032/year). A linear read puts Inactivity near 0.318 at the test cutoff, so
+the stale target understates it by about 0.044. This changes no decision -- block
+I tested five projected targets and dropped all five, recording that the stale
+target won despite being the least accurate of the five -- but it identifies the
+**cause** of that drift, which the record previously carried as an unexplained
+premise.
+
+### The one near-miss: r1 for the regressions
+R1 on top of the base-feature hurdle, at a genuine 20 seeds, against the shipped
+v3 regressions:
+
+| | fold 2025-06 | fold 2025-09 |
+| --- | --- | --- |
+| rmse fuel, base | 0.5969 | 0.5996 |
+| rmse fuel, + r1 | **0.5957** | **0.5982** |
+| rmse non-fuel, base | 0.7350 | 0.7451 |
+| rmse non-fuel, + r1 | **0.7328** | **0.7450** |
+
+Score 0.29159, **+0.00093**, better on both folds with no component worse.
+**Dropped** on the magnitude bar, missing it by 0.00057.
+
+All four RMSE measurements improve, on both folds, at 20 seeds. That makes it the
+strongest sub-bar regression result in the project -- against the kept hurdle
+(+0.00212) and seed bagging (+0.00178), and ahead of sweep 5's best non-passer.
+Nothing was written: sweep 8's write condition was a classifier change passing,
+and none did.
+
+### Sweep 8 summary
+| block | change | best result | verdict |
+| --- | --- | --- | --- |
+| sanity | arithmetic separation check | monotone, both folds | **passed, block continued** |
+| r1 | fuel renewal, classifier | +0.00028 (a0.5, 5s) | dropped |
+| r2 | all-basket renewal, classifier | -0.00000 (a0.75, 5s) | dropped |
+| r3 | calendar phase, classifier | +0.00033 (a0.75, **20s**) | dropped |
+| combo | r1+r3, classifier | +0.00010 (a0.75, 5s) | dropped |
+| reg | r1 on the hurdle | +0.00093 (**20s**, both folds) | dropped, closest miss |
+
+Four kept changes out of 66 variants across eight sweeps. The recipe table is
+unchanged and the selected picks are untouched.
+
+## A seed bug found in sweep 8, and what it does and does not affect
+
+While confirming the regression result I noticed a 20-seed run finishing in the
+same 134 s as its 5-seed screen and returning identical RMSEs. The cause:
+
+```python
+def hurdle_reg(Xtr, y, Xva, params=None, w=None, seeds=SEEDS, cat=False):
+```
+
+A `seeds=SEEDS` default binds the **list object** at definition time, so the
+`W.SEEDS = list(CONFIRM)` idiom used across sweep 5 rebinds the module name and
+leaves the default untouched. Every such call ran at 5 seeds. Fixed at the root
+in [`src/sweep2.py`](../src/sweep2.py): the four bagging helpers now take
+`seeds=None` and resolve the module attribute at call time, and `reg_predict` /
+`reg_rmses` thread an explicit `seeds` through.
+
+### Not affected
+- **`make_submission.py`**, where `seeds` is a required positional in both
+  `hurdle` and `bag_reg`. Every submission it produced used its stated seed count.
+- **Both selected picks.** `submission_v4_hybrid.csv` and
+  `submission_v4_alpha075.csv` are byte-identical to `make_submission.py` output
+  (verified, and the recipe output was promoted to the committed artifact), so
+  their CLV columns are genuine 20-seed.
+- **`V3_RF` / `V3_RN`**, the shipped regression reference. These came from
+  `stability.py`, which fits each seed once and composes the bag explicitly;
+  `preds/stability.json`'s `bag20` entry gives 0.59693739 / 0.59957643 and
+  0.73500345 / 0.74506159, matching the recorded constants exactly.
+- Every **classifier** number, in sweep 8 and in `write_v4_lags`, where seeds
+  were passed explicitly as a keyword.
+
+### Affected, and corrected below
+- sweep 5's R1 "20-seed confirmation" of the regression bundle (+0.00086) was a
+  **5-seed** measurement. It stays dropped: it failed the both-folds condition
+  outright, with fold 2 down 0.000012.
+- sweep 5's "regressors: hurdle + lag features, 20 seeds" was **5-seed**, as were
+  the CLV columns of `submission_v4_lags.csv` and
+  `submission_diag_r1_bundle.csv`, both of which print and log "20 seeds".
+- the claim "Every reported keep decision is at 20 seeds" was false for
+  regression tracks.
+
+### The v4_lags comparison was confounded, but only slightly
+`submission_v4_lags.csv` changed **two** things against v3 at once -- lag
+features in the regressions **and** 5 seeds instead of 20. Measured now at
+matched seed counts against the genuine 20-seed base:
+
+| lag-feature regressions | rmse fuel | rmse non-fuel | score | vs base 20s |
+| --- | --- | --- | --- | --- |
+| base, 20 seeds (shipped v3) | 0.5969 / 0.5996 | 0.7350 / 0.7451 | 0.29067 | - |
+| + lag features, 5 seeds | 0.5967 / 0.5972 | 0.7344 / 0.7458 | 0.29118 | +0.00051 |
+| + lag features, 20 seeds | 0.5957 / 0.5972 | 0.7347 / 0.7455 | 0.29139 | +0.00072 |
+
+The 5-seed row reproduces the logged v4_lags validation numbers (fold 2: 0.5972
+and 0.7458) exactly, confirming which measurement went into the record.
+
+**The seed-count effect alone is +0.00021** -- an order of magnitude smaller
+than the confound would need to be to matter. So the mislabelling is a
+documentation error, not a substantive one:
+
+- the logged v4_lags validation RMSEs barely move at 20 seeds (fold 2 non-fuel
+  0.7458 to 0.7455, fuel unchanged at 0.5972);
+- lag features in the regressions are **positive on validation at both seed
+  counts** (+0.00051 and +0.00072), so validation never disliked them;
+- the public board still disliked them (+0.0012 fuel, +0.0003 non-fuel), and
+  +0.00021 of seed effect does not account for that.
+
+**This corrects an overstatement made while the bug was being investigated**, not
+the original finding. The record's reading -- that validation liked the lag
+regressors and public did not, which is why the selected picks drop them --
+survives intact, and the decision to ship `v4_hybrid` over `v4_lags` was never in
+question (two real files; v4_hybrid scored 0.3052 against 0.3045).
+
+What the episode does change is confidence in the *procedure* rather than the
+conclusion: a "20-seed confirmation" that silently ran at 5 seeds went unnoticed
+across three sweeps, and was only caught because a runtime looked implausible.
+The fix makes the seed count explicit at every regression call site; the general
+lesson is that a mutable module-level default is a silent-failure channel, and
+the tell was available all along in the wall-clock time.
 
 ## Open questions
 - Does higher or lower win on the leaderboard?

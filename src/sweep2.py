@@ -83,8 +83,12 @@ def weights_for(cut, ref, half_life):
 
 # --- bagged fitting ----------------------------------------------------------
 
-def bag_clf(Xtr, ycode, Xva, labels, params=None, w=None, seeds=SEEDS, n_est=None, cat=False):
+def bag_clf(Xtr, ycode, Xva, labels, params=None, w=None, seeds=None, n_est=None, cat=False):
     """Average predict_proba over seeds; returns an (n x 17) frame."""
+    # `seeds=None` resolves the module attribute at CALL time. A
+    # `seeds=SEEDS` default would freeze the list object at def time and
+    # silently ignore any later reassignment of SEEDS.
+    seeds = SEEDS if seeds is None else seeds
     p = np.zeros((len(Xva), len(labels)))
     params = dict(params or BASE_CLF)
     if n_est:
@@ -107,7 +111,11 @@ def bag_clf(Xtr, ycode, Xva, labels, params=None, w=None, seeds=SEEDS, n_est=Non
     return pd.DataFrame(p / len(seeds), index=Xva.index, columns=labels)
 
 
-def bag_reg(Xtr, y, Xva, params=None, w=None, seeds=SEEDS, cat=False, clip=True):
+def bag_reg(Xtr, y, Xva, params=None, w=None, seeds=None, cat=False, clip=True):
+    # `seeds=None` resolves the module attribute at CALL time. A
+    # `seeds=SEEDS` default would freeze the list object at def time and
+    # silently ignore any later reassignment of SEEDS.
+    seeds = SEEDS if seeds is None else seeds
     out = np.zeros(len(Xva))
     params = dict(params or BASE_REG)
     for s in seeds:
@@ -126,8 +134,12 @@ def bag_reg(Xtr, y, Xva, params=None, w=None, seeds=SEEDS, cat=False, clip=True)
     return np.clip(out, 0, None) if clip else out
 
 
-def bag_binary(Xtr, yb, Xva, params=None, w=None, seeds=SEEDS):
+def bag_binary(Xtr, yb, Xva, params=None, w=None, seeds=None):
     """Average P(class 1) over seeds."""
+    # `seeds=None` resolves the module attribute at CALL time. A
+    # `seeds=SEEDS` default would freeze the list object at def time and
+    # silently ignore any later reassignment of SEEDS.
+    seeds = SEEDS if seeds is None else seeds
     out = np.zeros(len(Xva))
     params = dict(params or BASE_CLF)
     for s in seeds:
@@ -137,9 +149,13 @@ def bag_binary(Xtr, yb, Xva, params=None, w=None, seeds=SEEDS):
     return out / len(seeds)
 
 
-def hurdle_reg(Xtr, y, Xva, params=None, w=None, seeds=SEEDS, cat=False):
+def hurdle_reg(Xtr, y, Xva, params=None, w=None, seeds=None, cat=False):
     """(B1) P(y>0) * E[y | y>0], the second stage fitted on positive rows only.
     `cat` switches the magnitude stage to CatBoost; the gate stays LightGBM."""
+    # `seeds=None` resolves the module attribute at CALL time. A
+    # `seeds=SEEDS` default would freeze the list object at def time and
+    # silently ignore any later reassignment of SEEDS.
+    seeds = SEEDS if seeds is None else seeds
     pos = (y.to_numpy() > 0)
     if pos.all() or not pos.any():
         return bag_reg(Xtr, y, Xva, params, w, seeds, cat=cat)
@@ -150,29 +166,30 @@ def hurdle_reg(Xtr, y, Xva, params=None, w=None, seeds=SEEDS, cat=False):
     return np.clip(p * mag, 0, None)
 
 
-def reg_predict(D, t, kind):
+def reg_predict(D, t, kind, seeds=None):
     """One regression prediction under a named recipe."""
     X, y, Xv, w = D['Xtr'], D['ytr'][t], D['Xva'], D['w']
     if kind == 'direct':
-        return bag_reg(X, y, Xv, w=w)
+        return bag_reg(X, y, Xv, w=w, seeds=seeds)
     if kind == 'direct_cat':
         return bag_reg(X, y, Xv, params=dict(n_estimators=500, learning_rate=0.03, depth=6),
-                       w=w, cat=True)
+                       w=w, cat=True, seeds=seeds)
     if kind == 'hurdle':
-        return hurdle_reg(X, y, Xv, w=w)
+        return hurdle_reg(X, y, Xv, w=w, seeds=seeds)
     if kind == 'hurdle_cat':
-        return hurdle_reg(X, y, Xv, w=w, cat=True)
+        return hurdle_reg(X, y, Xv, w=w, cat=True, seeds=seeds)
     if kind == 'hurdle_avg':
-        return (hurdle_reg(X, y, Xv, w=w) + hurdle_reg(X, y, Xv, w=w, cat=True)) / 2
+        return (hurdle_reg(X, y, Xv, w=w, seeds=seeds)
+                + hurdle_reg(X, y, Xv, w=w, cat=True, seeds=seeds)) / 2
     raise ValueError(kind)
 
 
-def reg_rmses(ctx, kind, mode='monthly', extra=None):
+def reg_rmses(ctx, kind, mode='monthly', extra=None, seeds=None):
     rf, rn = [], []
     for v in V.FOLDS:
         D = ctx.fold(v, mode=mode, extra=extra)
-        rf.append(rmse(reg_predict(D, 'CLV_fuel', kind), D['yva'].CLV_fuel))
-        rn.append(rmse(reg_predict(D, 'CLV_nonfuel', kind), D['yva'].CLV_nonfuel))
+        rf.append(rmse(reg_predict(D, 'CLV_fuel', kind, seeds), D['yva'].CLV_fuel))
+        rn.append(rmse(reg_predict(D, 'CLV_nonfuel', kind, seeds), D['yva'].CLV_nonfuel))
     return rf, rn
 
 

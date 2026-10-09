@@ -30,7 +30,7 @@ parameter the evidence is split on, rather than agreeing with each other — see
 [`reports/notes.md`](reports/notes.md) for why that is deliberate and what it
 risks.
 
-**What transferred to the public board and what did not.** Seven sweeps and 60
+**What transferred to the public board and what did not.** Eight sweeps and 66
 variants produced four kept changes. Comparing each one's validation delta
 with its measured public delta gives a sharper rule than "labels matter":
 
@@ -172,7 +172,11 @@ validation print reproduces exactly: F1 0.5095 / 0.5169, rmse_fuel 0.5969 /
    totals. Lags reaching back before a customer's first transaction are NaN
    rather than 0, so "no history" stays distinct from "history with no spend".
    This is the only feature block in the project that improved the classifier;
-   see `reports/notes.md` for the fourteen that did not.
+   see `reports/notes.md` for the seventeen that did not. Sweep 8 measured why
+   the near-misses fail: a 34-column renewal encoding reaches the same
+   Fuel-growth AUC as the whole 62-column lag series (0.7286 against 0.7278) and
+   adds only +0.0021 on top of it, so the later blocks were re-encoding signal
+   the lags already carried rather than adding any.
 3. **Opportunity** — one 17-class LightGBM, probabilities averaged over the seed
    set, then a **decision rule**. The rule is where most of the F1 came from:
    iterative proportional fitting nudges the predicted class mix toward the last
@@ -303,6 +307,7 @@ them at all.
 | `src/sweep2.py` | sweeps A–G: training recipe, regressions, adoption, cutoff density, rule events, new features, seasonal analogs |
 | `src/train_label.py` | sweep 1: label-model variants a–f |
 | `src/sweep7.py` | sweep 7: expected-F1 decoding, hurdle/direct blend, gate calibration |
+| `src/features5.py`, `src/sweep8.py`, `src/sweep8_tracks.py` | sweep 8: renewal (fill-rhythm) features |
 | `src/features2.py` | block F feature groups (customer id, sites, fuel type/price, timing, vouchers) |
 | `src/features4.py` | sweep 6 blocks N1–N6 (own label history, per-category history, recency, basket structure, weekly series, longer lookback) |
 | `src/stability.py` | seed-stability analysis and the 20-seed bag |
@@ -315,8 +320,8 @@ them at all.
 | `docs/` | official label rules and data dictionary |
 
 Nothing in the **Record** group is imported by `make_submission.py`; they are
-kept deliberately, because they are the evidence behind fifty-six dropped
-variants across seven sweeps, and a reviewer should be able to check the
+kept deliberately, because they are the evidence behind sixty-two dropped
+variants across eight sweeps, and a reviewer should be able to check the
 negative results, not just the final model.
 
 `data/`, `submissions/` and `preds/` are local only and git-ignored. Every file
