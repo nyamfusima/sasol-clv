@@ -1008,10 +1008,10 @@ against a 20-seed incumbent:
 | bundle f3f4 + catboost mag | 0.290410 | 0.289893 | 0.29015 | +0.00086 |
 
 **Dropped**: +0.00086 is well under the bar, and fold 2 is down by 0.000012 --
-essentially flat, but it fails the both-folds condition outright. The seed
-mislabelling does not rescue it: the both-folds failure is intrinsic, and a
-20-seed re-measurement would have to move the mean by +0.00064 and flip fold 2
-to pass. Fold 1 alone
+essentially flat, but it fails the both-folds condition outright.
+
+**Re-measured at a genuine 20 seeds (10 Oct), and the reason it is dropped
+changes.** See the correction below; the verdict does not. Fold 1 alone
 gains +0.00174, so the entire mean gain comes from one fold, which is exactly
 the asymmetry the both-folds rule exists to catch.
 
@@ -2467,6 +2467,50 @@ public reading of about 1,650 customers, where 0.0015 RMSE is inside noise.
 the recipe and the three-way identity are two descriptions of the same file.
 
 Not submitted.
+
+## Sweep 5's R1 bundle, re-measured at a genuine 20 seeds (10 Oct)
+
+The last item outstanding from the frozen-default seed bug. The recorded
+"20-seed confirmation" of the best R1 bundle (f3f4 features + CatBoost
+magnitude) actually ran at 5 seeds. First, confirmation that the row really was
+affected: its recorded fold scores 0.290410 / 0.289893 reproduce from the
+**5-seed** screen RMSEs scored with `V3_F1` as 0.290403 / 0.289915, matching to
+within 4-dp rounding of the recorded RMSEs. The incumbent side of that
+comparison was sound -- v3's row reproduces exactly at 0.288673 / 0.289905.
+
+Measured now at 20 seeds (1,024 s), rmse fuel 0.5954 / 0.5999 and rmse non-fuel
+0.7326 / 0.7444:
+
+| | fold 2025-06 | fold 2025-09 | mean | both folds better |
+| --- | --- | --- | --- | --- |
+| incumbent v3 regressions | 0.288673 | 0.289905 | 0.28929 | - |
+| bundle, 5 seeds (what was recorded) | 0.290410 | 0.289893 | 0.29015 | **no** |
+| bundle, **genuine 20 seeds** | 0.290137 | 0.290028 | 0.29008 | **yes** |
+| delta at 5 seeds | +0.001737 | **-0.000012** | +0.00086 | |
+| delta at 20 seeds | +0.001464 | **+0.000123** | +0.00079 | |
+
+**Still dropped** -- +0.00079 against a 0.0015 bar -- so no verdict changes and
+no kept change was missed. The seed effect on the mean is **-0.00007**, i.e.
+nil, which is the third measurement agreeing that the bug was a documentation
+error rather than a substantive one (the lag regressions moved +0.00021).
+
+### This corrects something I wrote in the sweep 8 seed-bug section
+I wrote there that "the both-folds failure is intrinsic, and a 20-seed
+re-measurement would have to move the mean by +0.00064 and flip fold 2 to pass."
+**Fold 2 did flip.** At 20 seeds it is +0.000123 rather than -0.000012, so the
+both-folds condition passes and the bundle is now dropped on magnitude alone.
+Calling that failure intrinsic was wrong; a 0.000012 margin on one fold is
+exactly the kind of near-tie that four times the seeds can reverse, and I should
+have treated it as noise rather than as a property of the variant.
+
+The fold asymmetry narrowed too, though it did not disappear: fold 1 supplied
+101% of the mean gain at 5 seeds and 92% at 20. The both-folds rule was
+protecting against a real lopsidedness; it just was not protecting against what
+I claimed.
+
+So the honest final statement on this variant is: **it fails on effect size,
+with +0.00079 roughly half the bar, and it was never the case that the folds
+disagreed about its sign.**
 
 ## Open questions
 - Does higher or lower win on the leaderboard?

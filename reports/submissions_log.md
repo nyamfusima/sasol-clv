@@ -186,8 +186,12 @@ so their CLV columns are genuine 20-seed. `V3_RF`/`V3_RN` come from
 decimal places. Every classifier number passed seeds explicitly.
 
 Re-measured at matched seed counts, lag-feature regressions score 0.29118 at 5
-seeds and 0.29139 at 20 against a 0.29067 base, so the seed effect is **+0.00021**
--- a documentation error rather than a substantive one. No verdict changes.
+seeds and 0.29139 at 20 against a 0.29067 base, so the seed effect is **+0.00021**.
+Sweep 5's R1 bundle, re-measured at a genuine 20 seeds on 10 Oct, moves by
+**-0.00007** and stays dropped (+0.00079 against a 0.0015 bar). Both are
+documentation errors rather than substantive ones and no verdict changes --
+though the bundle's *reason* for being dropped does: at 20 seeds it passes the
+both-folds condition it was recorded as failing. See `reports/notes.md`.
 
 ### Recipe reproduction, verified byte-for-byte
 Every candidate is reproducible from the raw CSVs through `make_submission.py`,
