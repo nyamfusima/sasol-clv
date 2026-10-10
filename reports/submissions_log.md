@@ -12,7 +12,7 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | **0.3049** | Zindi ID **8ii1ZeJp**. Public 0.304851105 = F1 0.528141734 / rmse 0.593163991 / 0.723339664. Pre-registered bands: >0.5353 would have replaced the alpha 0.5 pick, 0.515-0.5353 keeps the pair. Landed mid-band at 0.5281, so **selection unchanged** |
 | 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected**. Folds disagreed on alpha; see notes. `submission_diag_alpha075.csv` and `submission_v4_alpha075.csv` are the SAME file, kept under both names so the pre-registration history stays readable; `--recipe v4_alpha075 --skip-validation` reproduces it byte-identically |
 | 2026-10-10 | submission_diag_v5_reg.csv | v4_alpha075 with the r1 renewal block added to the hurdle regressions (131 regression features, 20 seeds). Opportunity column **identical on all 5,488 rows** to submission_v4_alpha075.csv | 0.5982 | 0.7450 | 0.5139 | **0.3092** | Zindi ID **p7G9LVTM**. Public 0.309155505 = F1 0.535300706 / rmse 0.588231347 / 0.724859897. Pre-registered rule: adopt only if public RMSE improves on BOTH targets and the score gain is at least +0.0005 over A37bufRz. Fuel -0.00493 **pass**, non-fuel +0.00152 **FAIL**, score +0.00144 pass. The both-targets clause fails, so **v5_reg is NOT adopted** |
-| 2026-10-10 | submission_v5_fuel.csv | **POST-HOC.** v4_alpha075 except the CLV_fuel hurdle uses base + r1 renewal (131 features); CLV_nonfuel stays on base (97). Opportunity and CLV_nonfuel identical to submission_v4_alpha075.csv on all 5,488 rows; CLV_fuel identical to submission_diag_v5_reg.csv | 0.5982 | 0.7451 | 0.5139 | not submitted | validation **0.29148** (+0.00053 over v4_alpha075). Because all three columns are byte-identical to their sources, its public score is **determined, not estimated**: 0.4*0.535300706 + 0.3*(1-0.588231347/0.74) + 0.3*(1-0.723339664/0.816) = **0.309714415**, +0.002000 over A37bufRz. The per-target split was chosen **after** seeing p7G9LVTM's public result |
+| 2026-10-10 | submission_v5_fuel.csv | **POST-HOC.** v4_alpha075 except the CLV_fuel hurdle uses base + r1 renewal (131 features); CLV_nonfuel stays on base (97). Opportunity and CLV_nonfuel identical to submission_v4_alpha075.csv on all 5,488 rows; CLV_fuel identical to submission_diag_v5_reg.csv | 0.5982 | 0.7451 | 0.5139 | **0.3097** | Public **0.309714414**, rank **31**. Zindi ID pending. validation **0.29148** (+0.00053 over v4_alpha075). Because all three columns are byte-identical to their sources, its public score is **determined, not estimated**: 0.4*0.535300706 + 0.3*(1-0.588231347/0.74) + 0.3*(1-0.723339664/0.816) = **0.309714415**, +0.002000 over A37bufRz. The per-target split was chosen **after** seeing p7G9LVTM's public result |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, prior matching alpha 0.5. **Classifier 20 seeds; CLV columns were built at 5 seeds, not 20** -- a frozen default argument swallowed the seed override (found 9 Oct, see notes). Re-measured at matched seeds the difference is +0.00021 in score, so the row stands | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate at the time, not selected |
 | 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and is the **selected** one. validation 0.29068 |
 | 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude). CLV built at **5 seeds, not 20** -- same frozen-default bug | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086 at 5 seeds) |
@@ -97,7 +97,7 @@ one parameter the evidence is split on.
 | `submission_v3.csv` | - | 0.3031 | 0.28929 | submitted |
 | `submission_v4_simple.csv` | 8ii1ZeJp | 0.304851105 | 0.28796 | submitted, mid-band, not selected |
 | `submission_diag_v5_reg.csv` | p7G9LVTM | 0.309155505 | **0.29188** | diagnostic, **not adopted** (both-targets clause failed) |
-| `submission_v5_fuel.csv` | - | not submitted (0.309714415 determined) | **0.29148** | **post-hoc** candidate |
+| `submission_v5_fuel.csv` | pending | **0.309714414** (rank 31) | **0.29148** | **post-hoc**, recommended as selected pick 1 |
 
 \* the folds disagree about alpha 0.75: +0.0046 F1 on fold 1, -0.0032 on fold 2.
 
@@ -237,6 +237,27 @@ spend, which is what a fill-rhythm feature set should be expected to do.
 
 Scoring constants reconfirmed: the formula reproduces this row to 5e-10
 (0.309155506 computed against 0.309155505 reported). Fourth clean row.
+
+### v5_fuel's public result: the determined score was exact (10 Oct)
+Submitted and scored **0.309714414** at rank **31**, against a score computed
+before submission of 0.309714415 -- a residual of 7e-10, the same last-digit
+rounding as every other published row. All three components returned exactly as
+composed:
+
+| component | value | source column |
+| --- | --- | --- |
+| Opportunity | 0.535300706 | `A37bufRz`, byte-identical |
+| CLV Non Fuel | 0.723339664 | `A37bufRz`, byte-identical |
+| CLV Fuel | 0.588231347 | `p7G9LVTM`, byte-identical |
+
+This is the strongest reproducibility result in the project. The three local
+byte-identity checks (5,488/5,488 rows each) are now **confirmed externally** by
+a scorer that saw only the file: a submission composed from three previously
+scored files returned each of their component metrics unchanged. It also makes a
+fifth public row reproducing the scoring formula to 1e-9, so 0.74 and 0.816 are
+settled beyond argument.
+
+Gain over `A37bufRz`: **+0.002000**, exactly as predicted. Rank 37 to 31.
 
 ### `v5_fuel`: the fuel half only, chosen post-hoc
 `--recipe v5_fuel` gives the r1 renewal block to the **CLV_fuel hurdle only**

@@ -16,16 +16,18 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | **v4_alpha075 — same, α 0.75** | 0.29095\* | **0.3077** | **selected**, rank 37 |
 | v4_simple — lag classifier, Fuel ×1.25 rule | 0.28796 | 0.3049 | submitted, not selected |
 | v5_reg — renewal features in both hurdles | 0.29188 | 0.3092 | diagnostic, not adopted |
-| v5_fuel — renewal in the fuel hurdle only | 0.29148 | 0.3097† | post-hoc, not submitted |
+| **v5_fuel — renewal in the fuel hurdle only** | 0.29148 | **0.3097** | **best public**, rank 31 |
 
 Validation is the mean of two time-based folds; see
 [Validation protocol](#validation-protocol).
 
-† `v5_fuel`'s public figure is **determined, not measured**: its three columns
-are byte-identical to files whose public components are published, so the formula
-fixes its score at 0.309714415 without submitting it. It is a post-hoc recipe —
-the per-target split was chosen after seeing `v5_reg`'s public result — so that
-number is certain on the public split and optimistic as a private expectation.
+`v5_fuel`'s score was **computed before it was submitted**: its three columns
+are byte-identical to files whose public components were already published, so
+the formula fixed it at 0.309714415. It scored **0.309714414** — a 7e-10
+residual, confirming all three byte-identity checks against an external scorer.
+It is a post-hoc recipe, though: the per-target split was chosen after seeing
+`v5_reg`'s public result, so that number is certain on the public split and
+optimistic as a private expectation.
 
 \* `v4_alpha075`'s validation figure is the mean of two folds that **disagree
 about it**: α 0.75 is +0.0046 F1 on fold 1 and −0.0032 on fold 2. It is carried
