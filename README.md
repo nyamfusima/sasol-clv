@@ -90,6 +90,7 @@ validation score, validates the output before writing, and reports its runtime.
 | --- | --- | --- | --- | --- | --- |
 | **v4_hybrid** | 42–61 | yes | no | prior matching, α 0.5 | selected |
 | **v4_alpha075** | 42–61 | yes | no | prior matching, α 0.75 | selected |
+| `v5_reg` | 42–61 | yes | renewal | prior matching, α 0.75 | pre-registered diagnostic |
 | v4_lags | 42–61 | yes | yes | prior matching, α 0.5 | |
 | v4_simple | 42–61 | yes | no | Fuel ×1.25 | hedge |
 | v3 | 42–61 | no | no | prior matching, α 0.5 | |
@@ -113,11 +114,14 @@ with `cmp`:
 
 `v4_hybrid` was additionally verified from a fresh GitHub clone and a lock-file
 venv. Both submitted and selected files are exactly what their recipes produce.
+`submission_v2.csv` is the one entry that does not: it is 1 ULP off, because it
+belongs to the pairwise lineage below and was never promoted (see
+[`reports/submissions_log.md`](reports/submissions_log.md)).
 
-One honest caveat. `submission_v3.csv` and `submission_v2_bag20.csv` were
-produced by an earlier script that averaged per-seed predictions with
-`np.mean([...], axis=0)` (pairwise summation), whereas `make_submission`
-accumulates in a loop (sequential). The arithmetic is identical but the last-bit
+One honest caveat. `submission_v3.csv`, `submission_v2.csv` and
+`submission_v2_bag20.csv` were produced by an earlier script that averaged
+per-seed predictions with `np.mean([...], axis=0)` (pairwise summation), whereas
+`make_submission` accumulates in a loop (sequential). The arithmetic is identical but the last-bit
 rounding is not, so **no single implementation can be byte-exact for both
 lineages**. Re-deriving v4_hybrid through the recipe changed its CLV columns by
 exactly 1 ULP (4.4e-16), which a four-decimal RMSE cannot see; the recipe's

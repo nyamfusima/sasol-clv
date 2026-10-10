@@ -11,6 +11,7 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 
 | 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | **0.3049** | Zindi ID **8ii1ZeJp**. Public 0.304851105 = F1 0.528141734 / rmse 0.593163991 / 0.723339664. Pre-registered bands: >0.5353 would have replaced the alpha 0.5 pick, 0.515-0.5353 keeps the pair. Landed mid-band at 0.5281, so **selection unchanged** |
 | 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected**. Folds disagreed on alpha; see notes. `submission_diag_alpha075.csv` and `submission_v4_alpha075.csv` are the SAME file, kept under both names so the pre-registration history stays readable; `--recipe v4_alpha075 --skip-validation` reproduces it byte-identically |
+| 2026-10-10 | submission_diag_v5_reg.csv | v4_alpha075 with the r1 renewal block added to the hurdle regressions (131 regression features, 20 seeds). Opportunity column **identical on all 5,488 rows** to submission_v4_alpha075.csv | 0.5982 | 0.7450 | 0.5139 | not submitted | validation **0.29188** (+0.00093 over v4_alpha075); **diagnostic, pre-registered: adopt only if public RMSE improves on BOTH targets and the public score gain is at least +0.0005 over A37bufRz (0.307714693)** |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, prior matching alpha 0.5. **Classifier 20 seeds; CLV columns were built at 5 seeds, not 20** -- a frozen default argument swallowed the seed override (found 9 Oct, see notes). Re-measured at matched seeds the difference is +0.00021 in score, so the row stands | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate at the time, not selected |
 | 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and is the **selected** one. validation 0.29068 |
 | 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude). CLV built at **5 seeds, not 20** -- same frozen-default bug | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086 at 5 seeds) |
@@ -88,12 +89,13 @@ one parameter the evidence is split on.
 
 | file | Zindi ID | public | validation | status |
 | --- | --- | --- | --- | --- |
-| `submission_v4_alpha075.csv` | **A37bufRz** | **0.307714693** (rank 37) | 0.29139* | **selected** |
+| `submission_v4_alpha075.csv` | **A37bufRz** | **0.307714693** (rank 37) | 0.29095* | **selected** |
 | `submission_v4_hybrid.csv` | **rjQUYHF9** | **0.305152978** (rank 49) | 0.29068 | **selected** |
 | `submission_v4_hybrid.csv` (pre-promotion) | Bb8Js9A2 | 0.305152978 | 0.29068 | superseded |
 | `submission_v4_lags.csv` | - | 0.3045 | 0.29119 | submitted |
 | `submission_v3.csv` | - | 0.3031 | 0.28929 | submitted |
 | `submission_v4_simple.csv` | 8ii1ZeJp | 0.304851105 | 0.28796 | submitted, mid-band, not selected |
+| `submission_diag_v5_reg.csv` | - | not submitted | **0.29188** | pre-registered diagnostic |
 
 \* the folds disagree about alpha 0.75: +0.0046 F1 on fold 1, -0.0032 on fold 2.
 
@@ -194,13 +196,36 @@ with no cached artifacts:
 | `submission_v4_alpha075.csv` | `--recipe v4_alpha075` | **byte-identical** | 1970 s |
 | `submission_v4_hybrid.csv` | `--recipe v4_hybrid` | **byte-identical**, also from a clean GitHub clone | 4785 s full / 1642 s final-fit |
 | `submission_v4_simple.csv` | `--recipe v4_simple` | **byte-identical** | 1806 s |
-| `submission_v2.csv` | `--recipe v2` | **byte-identical** | 646 s |
+| `submission_v2.csv` | `--recipe v2` | **1 ULP, not byte-identical** -- see below | 328 s |
+| `submission_diag_v5_reg.csv` | `--recipe v5_reg` | **byte-identical** across two runs (sha256 `ac71ce631f10c6bc...`) | 4680 s full / 1689 s final-fit |
 
 So both submitted and selected files -- A37bufRz and rjQUYHF9 -- are exactly what
 their documented recipes produce. `submission_v4_simple.csv` needed no promotion:
 it was built by composition from cached probabilities, and because its CLV came
 from the already-promoted v4_hybrid, both lineages are now the loop-summation
 form and the recipe matches it exactly.
+
+#### Correction (10 Oct): `submission_v2.csv` is 1 ULP off its recipe
+Rebuilding v2 through `make_submission.py` gives a file that differs from the
+committed artifact by exactly **4.441e-16** on 1,524 of 5,488 `CLV_fuel` rows and
+2,222 `CLV_nonfuel` rows, with the `Opportunity` column identical on all 5,488.
+That is the documented `np.mean` pairwise against loop sequential lineage
+mismatch: `submission_v2.csv` dates from 2026-10-07 13:09, the same un-promoted
+batch as `submission_v3.csv` and `submission_v2_bag20.csv`, and was never
+re-derived through the recipe the way `v4_hybrid` was. The earlier
+"byte-identical" entry for it was wrong.
+
+**Not promoted.** Rewriting the artifact would change the bytes behind an already
+recorded public score (0.2991) for a file that is neither selected nor worth a
+submission slot to re-confirm. The promote-then-resubmit route was justified for
+`v4_hybrid` because it was a selected pick. The rows that matter for review --
+both selected picks -- are unaffected and remain byte-exact.
+
+This surfaced while regression-testing an unrelated refactor, which was itself
+verified separately: `stack()` and `feats()` are the only functions that changed,
+they are pure, and both produce bit-identical frames on the `extra=None` and
+`extra=lags` paths. `v5_reg`'s `Opportunity` column matching the pre-refactor
+`v4_alpha075` artifact on all 5,488 rows confirms the classifier path end to end.
 
 ### The scoring formula is now confirmed exactly
 v4_hybrid is the first public row reported with full-precision components, and it

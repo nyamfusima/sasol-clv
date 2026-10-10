@@ -2298,6 +2298,84 @@ The fix makes the seed count explicit at every regression call site; the general
 lesson is that a mutable module-level default is a silent-failure channel, and
 the tell was available all along in the wall-clock time.
 
+## The v5_reg diagnostic, pre-registered (10 Oct)
+
+`--recipe v5_reg` is `v4_alpha075` with one change: the hurdle regressions see
+the base features plus the r1 renewal block of
+[`src/features5.py`](../src/features5.py), 131 regression features against 97,
+at the same 20 seeds. The label side is untouched, so the `Opportunity` column is
+identical to `submission_v4_alpha075.csv` on all 5,488 rows -- verified, not
+assumed.
+
+| | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| v4_alpha075 score | 0.29343 | 0.28847 | 0.29095 |
+| **v5_reg score** | **0.29473** | **0.28907** | **0.29188** |
+| delta | +0.00130 | +0.00060 | **+0.00093** |
+| rmse fuel | 0.5957 (was 0.5969) | 0.5982 (was 0.5996) | |
+| rmse non-fuel | 0.7328 (was 0.7350) | 0.7450 (was 0.7451) | |
+
+All four RMSE measurements improve, on both folds, and F1 is unchanged by
+construction. The +0.00093 reproduces the sweep 8 measurement exactly, which is
+the point of building it through the recipe rather than trusting the sweep
+harness.
+
+**Why it is a diagnostic and not a candidate.** +0.00093 is under the 0.0015 keep
+bar. The project's transfer record is that sub-0.001 regression refinements
+either vanish or reverse on the public board, which is exactly the band this sits
+in, so it is carried with a pre-registered adoption rule rather than selected:
+
+> adopt only if public RMSE improves on **both** targets and the public score
+> gain is at least +0.0005 over A37bufRz (0.307714693)
+
+Requiring both targets to improve is the part that matters. Fold 2's non-fuel
+gain is 0.0001 -- essentially nothing -- so a public reading that improves fuel
+while non-fuel drifts would be consistent with noise rather than signal, and the
+rule refuses it.
+
+### Verification
+- **Determinism**: two runs, the second with `--skip-validation`, are
+  byte-identical (sha256 `ac71ce631f10c6bc...`, 399,080 bytes).
+- **Label identity**: `Opportunity` matches `submission_v4_alpha075.csv` on
+  5,488 of 5,488 rows. Since that artifact predates the recipe refactor, this is
+  also an end-to-end check that the refactor preserved the classifier path.
+- **CLV**: every row changes, as it must -- mean fuel 1.45712 against 1.45659,
+  mean non-fuel 0.72057 against 0.72160, maximum per-row shift 0.60 and 0.33.
+  Minimum CLV 0.02672.
+- **Dependency envelope unchanged**: `features5` imports only numpy, pandas and
+  `features`, so the submission path is still pandas / numpy / scikit-learn /
+  lightgbm.
+- Runtime 4,680 s with validation, 1,689 s for the final fit alone.
+
+### A stale claim found while regression-testing the refactor
+The refactor generalised `make_submission`'s single lags flag into an explicit
+extra-feature dict per model. To check it had not disturbed existing recipes I
+rebuilt `v2` and compared bytes -- and it differed. The cause was not the
+refactor:
+
+- the difference is exactly **4.441e-16**, one ULP, on 1,524 and 2,222 CLV rows
+  with `Opportunity` identical on all 5,488 -- the documented pairwise-against-
+  sequential summation signature;
+- `submission_v2.csv` dates from 2026-10-07 13:09, the same un-promoted batch as
+  `v3` and `v2_bag20`, where every promoted artifact is dated 10-08;
+- and the refactor was verified equivalent directly: `stack()` and `feats()` are
+  the only functions changed, they are pure, and both return bit-identical
+  frames on the `extra=None` and `extra=lags` paths.
+
+So the reproduce table's "byte-identical" entry for `v2` was wrong and is now
+corrected to "1 ULP, not byte-identical". The artifact was **not** promoted:
+rewriting it would change the bytes behind an already recorded public score for a
+file that is neither selected nor worth a submission to re-confirm.
+
+Two smaller record fixes made at the same time: `submissions_log.md` still
+carried `v4_alpha075`'s superseded validation figure 0.29139 in its status table
+where the README and these notes had the corrected **0.29095**; and the README's
+pairwise-lineage caveat named only `v3` and `v2_bag20`, now also `v2`.
+
+The transferable lesson is about the check rather than the bug. A verification
+step aimed at one thing found a different, older error, which is an argument for
+re-running the reproduce table rather than treating it as settled once written.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

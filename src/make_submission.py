@@ -6,6 +6,7 @@
     python src/make_submission.py --recipe v4_simple
     python src/make_submission.py --recipe v3
     python src/make_submission.py --recipe v2
+    python src/make_submission.py --recipe v5_reg       # pre-registered diagnostic
 
 Each recipe builds every snapshot in memory, prints the per-fold and mean
 validation score, validates the output, and reports its runtime. Needs only
@@ -20,7 +21,9 @@ Method, in order:
      recipes, the lag series of features3.py (62 more) -- twelve monthly lags of
      fuel litres, fuel rands, non-fuel rands and basket counts plus thirteen
      weekly fuel totals. Lags reaching before a customer's first transaction are
-     NaN, not 0.
+     NaN, not 0. For `v5_reg` the hurdle regressions instead add the r1
+     renewal block of features5.py (34 columns: fill-gap statistics, phase, and
+     projected fill counts and spend for the outcome window).
   3. Opportunity: one 17-class LightGBM, probabilities averaged over the seed
      set, then a decision rule (see `apply_rule`).
   4. CLV_fuel / CLV_nonfuel: a hurdle model, P(y>0) from a classifier times
@@ -70,8 +73,18 @@ RECIPES = {
     # and favoured 0.75. Both are carried as candidates.
     'v4_alpha075': dict(seeds=range(42, 62), clf_lags=True, reg_lags=False, rule='prior',
                         alpha=0.75),
+    # Pre-registered diagnostic. Identical to v4_alpha075 on the label side --
+    # same lag classifier, same 20 seeds, same prior matching at alpha 0.75, so
+    # the Opportunity column is identical row for row -- and differs only in the
+    # hurdle regressions, which add the r1 renewal block of features5.py to the
+    # base features. Validation gain +0.00093 at 20 seeds, improving all four
+    # RMSE/fold combinations but short of the +0.0015 keep bar, which is why it
+    # ships as a diagnostic rather than a candidate.
+    'v5_reg':     dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
+                       reg_renew=True, rule='prior', alpha=0.75),
 }
 DEFAULT_OUT = {k: f'submissions/submission_{k}.csv' for k in RECIPES}
+DEFAULT_OUT['v5_reg'] = 'submissions/submission_diag_v5_reg.csv'
 
 
 def monthly(first=FIRST_CUTOFF, last=LAST_CUTOFF):
@@ -181,7 +194,7 @@ def apply_rule(proba, labels, recipe, snaps, cutoffs, for_cutoff):
 
 # --- pipeline ----------------------------------------------------------------
 
-def build_snapshots(d, cfg, cats, cutoffs, with_lags, verbose=True):
+def build_snapshots(d, cfg, cats, cutoffs, with_lags, with_renew=False, verbose=True):
     import features3 as F3
     snaps = {}
     for c in cutoffs:
@@ -197,23 +210,48 @@ def build_snapshots(d, cfg, cats, cutoffs, with_lags, verbose=True):
             if verbose:
                 print(f'  lag features {c}', flush=True)
             lags[c] = F3.build(d, c, snaps[c][0].index)
-    return snaps, lags
+    renew = None
+    if with_renew:
+        import features5 as F5     # numpy/pandas only, like features3
+        renew = {}
+        for c in cutoffs:
+            if verbose:
+                print(f'  renewal features {c}', flush=True)
+            renew[c] = F5.build_r1(d, c, snaps[c][0].index, cfg)
+    return snaps, lags, renew
 
 
-def stack(snaps, cutoffs, lags=None):
+def stack(snaps, cutoffs, extra=None):
+    """Training matrix over `cutoffs`, optionally joined to an extra-feature
+    dict (the lag series, or the renewal block) cutoff by cutoff. Joining per
+    cutoff matters: IDs repeat across snapshots, so a join after the concat
+    would be a many-to-many join on a non-unique index."""
     parts = []
     for c in cutoffs:
         X = snaps[c][0]
-        parts.append(X if lags is None else X.join(lags[c]))
+        parts.append(X if extra is None else X.join(extra[c]))
     X = pd.concat(parts)
     y = pd.concat([snaps[c][1] for c in cutoffs])
     assert len(X) == len(y)
     return X, y
 
 
-def feats(snaps, lags, c, use_lags):
+def feats(snaps, extra, c):
+    """One cutoff's prediction matrix, matching `stack`'s column order."""
     X = snaps[c][0]
-    return X.join(lags[c]) if use_lags else X
+    return X if extra is None else X.join(extra[c])
+
+
+def clf_extra(rec, lags):
+    return lags if rec['clf_lags'] else None
+
+
+def reg_extra(rec, lags, renew):
+    """Which extra features the hurdle regressions see. `reg_renew` and
+    `reg_lags` are mutually exclusive across the recipe table."""
+    if rec.get('reg_renew'):
+        return renew
+    return lags if rec['reg_lags'] else None
 
 
 def fuel_weight_scan(snaps, cutoffs, lags, labels, code, seeds):
@@ -224,7 +262,7 @@ def fuel_weight_scan(snaps, cutoffs, lags, labels, code, seeds):
     for v in FOLDS:
         tr = trainable_for(cutoffs, v)
         Xtr, ytr = stack(snaps, tr, lags)
-        Xva = feats(snaps, lags, v, lags is not None)
+        Xva = feats(snaps, lags, v)
         pr[v] = bag_clf(Xtr, ytr.Opportunity.map(code).to_numpy(), Xva, labels,
                         seeds).to_numpy()
         truth[v] = snaps[v][1].Opportunity.to_numpy()
@@ -280,22 +318,24 @@ def main():
     cutoffs = monthly()
     need_lags = rec['clf_lags'] or rec['reg_lags']
     print(f'building {len(cutoffs) + 1} snapshots from {a.train}')
-    snaps, lags = build_snapshots(d, cfg, cats, cutoffs + [TEST_CUTOFF], need_lags)
+    snaps, lags, renew = build_snapshots(d, cfg, cats, cutoffs + [TEST_CUTOFF],
+                                         need_lags, rec.get('reg_renew', False))
+    XC = clf_extra(rec, lags)
+    XR = reg_extra(rec, lags, renew)
 
     if rec['rule'] == 'fuel' and not a.skip_validation:
-        rec['weight'], _, _ = fuel_weight_scan(
-            snaps, cutoffs, lags if rec['clf_lags'] else None, labels, code, seeds)
+        rec['weight'], _, _ = fuel_weight_scan(snaps, cutoffs, XC, labels, code, seeds)
 
     if not a.skip_validation:
         scores = []
         for v in FOLDS:
             tr = trainable_for(cutoffs, v)
-            Xc, yc = stack(snaps, tr, lags if rec['clf_lags'] else None)
-            Xvc = feats(snaps, lags, v, rec['clf_lags'])
+            Xc, yc = stack(snaps, tr, XC)
+            Xvc = feats(snaps, XC, v)
             proba = bag_clf(Xc, yc.Opportunity.map(code).to_numpy(), Xvc, labels, seeds)
             opp, note = apply_rule(proba, labels, rec, snaps, cutoffs, v)
-            Xr, yr = stack(snaps, tr, lags if rec['reg_lags'] else None)
-            Xvr = feats(snaps, lags, v, rec['reg_lags'])
+            Xr, yr = stack(snaps, tr, XR)
+            Xvr = feats(snaps, XR, v)
             reg = {t: hurdle(Xr, yr[t], Xvr, seeds) for t in TARGETS}
             yva = snaps[v][1]
             f1 = f1_score(yva.Opportunity, opp, average='weighted', zero_division=0)
@@ -310,8 +350,8 @@ def main():
         print(f'VALIDATION mean: F1 {m[0]:.4f} | rmse_fuel {m[1]:.4f} | '
               f'rmse_nonfuel {m[2]:.4f} | score {m[3]:.5f}')
 
-    Xc, yc = stack(snaps, cutoffs, lags if rec['clf_lags'] else None)
-    Xtc = feats(snaps, lags, TEST_CUTOFF, rec['clf_lags'])
+    Xc, yc = stack(snaps, cutoffs, XC)
+    Xtc = feats(snaps, XC, TEST_CUTOFF)
     print(f'final fit: {len(cutoffs)} snapshots, {len(Xc)} rows, '
           f'{Xc.shape[1]} classifier features')
     proba = bag_clf(Xc, yc.Opportunity.map(code).to_numpy(), Xtc, labels, seeds)
@@ -322,8 +362,9 @@ def main():
     opp, note = apply_rule(proba, labels, rec, snaps, cutoffs, TEST_CUTOFF)
     if note:
         print(f'  decision rule: {note}')
-    Xr, yr = stack(snaps, cutoffs, lags if rec['reg_lags'] else None)
-    Xtr_ = feats(snaps, lags, TEST_CUTOFF, rec['reg_lags'])
+    Xr, yr = stack(snaps, cutoffs, XR)
+    Xtr_ = feats(snaps, XR, TEST_CUTOFF)
+    print(f'           {Xr.shape[1]} regression features')
     reg = {t: hurdle(Xr, yr[t], Xtr_, seeds) for t in TARGETS}
 
     test_ids = pd.read_csv(a.test, dtype=str).ID
