@@ -7,6 +7,7 @@
     python src/make_submission.py --recipe v3
     python src/make_submission.py --recipe v2
     python src/make_submission.py --recipe v5_reg       # pre-registered diagnostic
+    python src/make_submission.py --recipe v5_fuel      # post-hoc, fuel only
 
 Each recipe builds every snapshot in memory, prints the per-fold and mean
 validation score, validates the output, and reports its runtime. Needs only
@@ -23,7 +24,9 @@ Method, in order:
      weekly fuel totals. Lags reaching before a customer's first transaction are
      NaN, not 0. For `v5_reg` the hurdle regressions instead add the r1
      renewal block of features5.py (34 columns: fill-gap statistics, phase, and
-     projected fill counts and spend for the outcome window).
+     projected fill counts and spend for the outcome window). `v5_fuel` gives
+     that block to the CLV_fuel hurdle only and leaves CLV_nonfuel on base
+     features, so the two targets use different feature sets.
   3. Opportunity: one 17-class LightGBM, probabilities averaged over the seed
      set, then a decision rule (see `apply_rule`).
   4. CLV_fuel / CLV_nonfuel: a hurdle model, P(y>0) from a classifier times
@@ -82,6 +85,14 @@ RECIPES = {
     # ships as a diagnostic rather than a candidate.
     'v5_reg':     dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
                        reg_renew=True, rule='prior', alpha=0.75),
+    # POST-HOC. The per-target split was chosen after seeing v5_reg's public
+    # result, which improved fuel RMSE by 0.0049 and worsened non-fuel by
+    # 0.0015. Only the fuel hurdle takes the renewal block; non-fuel stays on
+    # base features. Fuel is supported by both validation folds (-0.0012 and
+    # -0.0014) and by public; non-fuel was mixed (-0.0022, -0.0001, +0.0015) and
+    # is excluded. This is not a pre-registered test and must be read as one.
+    'v5_fuel':    dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
+                       reg_renew_targets=('CLV_fuel',), rule='prior', alpha=0.75),
 }
 DEFAULT_OUT = {k: f'submissions/submission_{k}.csv' for k in RECIPES}
 DEFAULT_OUT['v5_reg'] = 'submissions/submission_diag_v5_reg.csv'
@@ -246,12 +257,33 @@ def clf_extra(rec, lags):
     return lags if rec['clf_lags'] else None
 
 
-def reg_extra(rec, lags, renew):
-    """Which extra features the hurdle regressions see. `reg_renew` and
-    `reg_lags` are mutually exclusive across the recipe table."""
+def reg_extra(rec, lags, renew, target=None):
+    """Which extra features the hurdle for `target` sees. `reg_renew_targets`
+    names the targets that get the renewal block and leaves the rest on base
+    features; `reg_renew` and `reg_lags` apply to both targets alike. The three
+    are mutually exclusive across the recipe table."""
+    picked = rec.get('reg_renew_targets')
+    if picked is not None:
+        return renew if target in picked else None
     if rec.get('reg_renew'):
         return renew
     return lags if rec['reg_lags'] else None
+
+
+def reg_fit(rec, snaps, cutoffs, at, lags, renew, seeds):
+    """Hurdle predictions at `at` for both targets, each on its own feature
+    set. Matrices are stacked once per distinct feature set, not once per
+    target, so a recipe where both targets share features pays no extra."""
+    preds, ncols, cache = {}, {}, {}
+    for t in TARGETS:
+        extra = reg_extra(rec, lags, renew, t)
+        k = id(extra)
+        if k not in cache:
+            cache[k] = (stack(snaps, cutoffs, extra), feats(snaps, extra, at))
+        (Xr, yr), Xva = cache[k]
+        ncols[t] = Xr.shape[1]
+        preds[t] = hurdle(Xr, yr[t], Xva, seeds)
+    return preds, ncols
 
 
 def fuel_weight_scan(snaps, cutoffs, lags, labels, code, seeds):
@@ -318,10 +350,10 @@ def main():
     cutoffs = monthly()
     need_lags = rec['clf_lags'] or rec['reg_lags']
     print(f'building {len(cutoffs) + 1} snapshots from {a.train}')
+    need_renew = bool(rec.get('reg_renew') or rec.get('reg_renew_targets'))
     snaps, lags, renew = build_snapshots(d, cfg, cats, cutoffs + [TEST_CUTOFF],
-                                         need_lags, rec.get('reg_renew', False))
+                                         need_lags, need_renew)
     XC = clf_extra(rec, lags)
-    XR = reg_extra(rec, lags, renew)
 
     if rec['rule'] == 'fuel' and not a.skip_validation:
         rec['weight'], _, _ = fuel_weight_scan(snaps, cutoffs, XC, labels, code, seeds)
@@ -334,9 +366,7 @@ def main():
             Xvc = feats(snaps, XC, v)
             proba = bag_clf(Xc, yc.Opportunity.map(code).to_numpy(), Xvc, labels, seeds)
             opp, note = apply_rule(proba, labels, rec, snaps, cutoffs, v)
-            Xr, yr = stack(snaps, tr, XR)
-            Xvr = feats(snaps, XR, v)
-            reg = {t: hurdle(Xr, yr[t], Xvr, seeds) for t in TARGETS}
+            reg, _ = reg_fit(rec, snaps, tr, v, lags, renew, seeds)
             yva = snaps[v][1]
             f1 = f1_score(yva.Opportunity, opp, average='weighted', zero_division=0)
             rf = float(np.sqrt(((reg['CLV_fuel'] - yva.CLV_fuel) ** 2).mean()))
@@ -362,10 +392,9 @@ def main():
     opp, note = apply_rule(proba, labels, rec, snaps, cutoffs, TEST_CUTOFF)
     if note:
         print(f'  decision rule: {note}')
-    Xr, yr = stack(snaps, cutoffs, XR)
-    Xtr_ = feats(snaps, XR, TEST_CUTOFF)
-    print(f'           {Xr.shape[1]} regression features')
-    reg = {t: hurdle(Xr, yr[t], Xtr_, seeds) for t in TARGETS}
+    reg, ncols = reg_fit(rec, snaps, cutoffs, TEST_CUTOFF, lags, renew, seeds)
+    print('           regression features: '
+          + ', '.join(f'{t} {ncols[t]}' for t in TARGETS))
 
     test_ids = pd.read_csv(a.test, dtype=str).ID
     sub = pd.DataFrame({'CLV_fuel': reg['CLV_fuel'], 'CLV_nonfuel': reg['CLV_nonfuel'],

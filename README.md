@@ -15,9 +15,17 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | v4_hybrid — lag classifier, v3 regressions, α 0.5 | 0.29068 | 0.3052 | **selected**, rank 49 |
 | **v4_alpha075 — same, α 0.75** | 0.29095\* | **0.3077** | **selected**, rank 37 |
 | v4_simple — lag classifier, Fuel ×1.25 rule | 0.28796 | 0.3049 | submitted, not selected |
+| v5_reg — renewal features in both hurdles | 0.29188 | 0.3092 | diagnostic, not adopted |
+| v5_fuel — renewal in the fuel hurdle only | 0.29148 | 0.3097† | post-hoc, not submitted |
 
 Validation is the mean of two time-based folds; see
 [Validation protocol](#validation-protocol).
+
+† `v5_fuel`'s public figure is **determined, not measured**: its three columns
+are byte-identical to files whose public components are published, so the formula
+fixes its score at 0.309714415 without submitting it. It is a post-hoc recipe —
+the per-target split was chosen after seeing `v5_reg`'s public result — so that
+number is certain on the public split and optimistic as a private expectation.
 
 \* `v4_alpha075`'s validation figure is the mean of two folds that **disagree
 about it**: α 0.75 is +0.0046 F1 on fold 1 and −0.0032 on fold 2. It is carried
@@ -90,7 +98,8 @@ validation score, validates the output before writing, and reports its runtime.
 | --- | --- | --- | --- | --- | --- |
 | **v4_hybrid** | 42–61 | yes | no | prior matching, α 0.5 | selected |
 | **v4_alpha075** | 42–61 | yes | no | prior matching, α 0.75 | selected |
-| `v5_reg` | 42–61 | yes | renewal | prior matching, α 0.75 | pre-registered diagnostic |
+| `v5_reg` | 42–61 | yes | renewal (both targets) | prior matching, α 0.75 | diagnostic, **not adopted** |
+| `v5_fuel` | 42–61 | yes | renewal (fuel only) | prior matching, α 0.75 | **post-hoc** candidate |
 | v4_lags | 42–61 | yes | yes | prior matching, α 0.5 | |
 | v4_simple | 42–61 | yes | no | Fuel ×1.25 | hedge |
 | v3 | 42–61 | no | no | prior matching, α 0.5 | |

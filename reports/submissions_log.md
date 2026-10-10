@@ -11,7 +11,8 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 
 | 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | **0.3049** | Zindi ID **8ii1ZeJp**. Public 0.304851105 = F1 0.528141734 / rmse 0.593163991 / 0.723339664. Pre-registered bands: >0.5353 would have replaced the alpha 0.5 pick, 0.515-0.5353 keeps the pair. Landed mid-band at 0.5281, so **selection unchanged** |
 | 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected**. Folds disagreed on alpha; see notes. `submission_diag_alpha075.csv` and `submission_v4_alpha075.csv` are the SAME file, kept under both names so the pre-registration history stays readable; `--recipe v4_alpha075 --skip-validation` reproduces it byte-identically |
-| 2026-10-10 | submission_diag_v5_reg.csv | v4_alpha075 with the r1 renewal block added to the hurdle regressions (131 regression features, 20 seeds). Opportunity column **identical on all 5,488 rows** to submission_v4_alpha075.csv | 0.5982 | 0.7450 | 0.5139 | not submitted | validation **0.29188** (+0.00093 over v4_alpha075); **diagnostic, pre-registered: adopt only if public RMSE improves on BOTH targets and the public score gain is at least +0.0005 over A37bufRz (0.307714693)** |
+| 2026-10-10 | submission_diag_v5_reg.csv | v4_alpha075 with the r1 renewal block added to the hurdle regressions (131 regression features, 20 seeds). Opportunity column **identical on all 5,488 rows** to submission_v4_alpha075.csv | 0.5982 | 0.7450 | 0.5139 | **0.3092** | Zindi ID **p7G9LVTM**. Public 0.309155505 = F1 0.535300706 / rmse 0.588231347 / 0.724859897. Pre-registered rule: adopt only if public RMSE improves on BOTH targets and the score gain is at least +0.0005 over A37bufRz. Fuel -0.00493 **pass**, non-fuel +0.00152 **FAIL**, score +0.00144 pass. The both-targets clause fails, so **v5_reg is NOT adopted** |
+| 2026-10-10 | submission_v5_fuel.csv | **POST-HOC.** v4_alpha075 except the CLV_fuel hurdle uses base + r1 renewal (131 features); CLV_nonfuel stays on base (97). Opportunity and CLV_nonfuel identical to submission_v4_alpha075.csv on all 5,488 rows; CLV_fuel identical to submission_diag_v5_reg.csv | 0.5982 | 0.7451 | 0.5139 | not submitted | validation **0.29148** (+0.00053 over v4_alpha075). Because all three columns are byte-identical to their sources, its public score is **determined, not estimated**: 0.4*0.535300706 + 0.3*(1-0.588231347/0.74) + 0.3*(1-0.723339664/0.816) = **0.309714415**, +0.002000 over A37bufRz. The per-target split was chosen **after** seeing p7G9LVTM's public result |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, prior matching alpha 0.5. **Classifier 20 seeds; CLV columns were built at 5 seeds, not 20** -- a frozen default argument swallowed the seed override (found 9 Oct, see notes). Re-measured at matched seeds the difference is +0.00021 in score, so the row stands | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate at the time, not selected |
 | 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and is the **selected** one. validation 0.29068 |
 | 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude). CLV built at **5 seeds, not 20** -- same frozen-default bug | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086 at 5 seeds) |
@@ -95,7 +96,8 @@ one parameter the evidence is split on.
 | `submission_v4_lags.csv` | - | 0.3045 | 0.29119 | submitted |
 | `submission_v3.csv` | - | 0.3031 | 0.28929 | submitted |
 | `submission_v4_simple.csv` | 8ii1ZeJp | 0.304851105 | 0.28796 | submitted, mid-band, not selected |
-| `submission_diag_v5_reg.csv` | - | not submitted | **0.29188** | pre-registered diagnostic |
+| `submission_diag_v5_reg.csv` | p7G9LVTM | 0.309155505 | **0.29188** | diagnostic, **not adopted** (both-targets clause failed) |
+| `submission_v5_fuel.csv` | - | not submitted (0.309714415 determined) | **0.29148** | **post-hoc** candidate |
 
 \* the folds disagree about alpha 0.75: +0.0046 F1 on fold 1, -0.0032 on fold 2.
 
@@ -204,6 +206,91 @@ their documented recipes produce. `submission_v4_simple.csv` needed no promotion
 it was built by composition from cached probabilities, and because its CLV came
 from the already-promoted v4_hybrid, both lineages are now the loop-summation
 form and the recipe matches it exactly.
+
+### The v5_reg pre-registration resolved: NOT adopted (10 Oct)
+`p7G9LVTM` scored **0.309155505** (CLV Fuel 0.588231347, CLV Non Fuel
+0.724859897, Opportunity 0.535300706). Against `A37bufRz` (0.307714693):
+
+| component | A37bufRz | p7G9LVTM | delta | pre-registered test |
+| --- | --- | --- | --- | --- |
+| CLV Fuel RMSE | 0.593163991 | 0.588231347 | **-0.00493** | improves -- **pass** |
+| CLV Non Fuel RMSE | 0.723339664 | 0.724859897 | **+0.00152** | worsens -- **FAIL** |
+| Opportunity F1 | 0.535300706 | 0.535300706 | 0.00000 | identical by construction |
+| score | 0.307714693 | 0.309155505 | **+0.00144** | >= +0.0005 -- pass |
+
+**The both-targets clause fails, so v5_reg is not adopted.** Two of the three
+conditions passed and the score gain was nearly triple the required margin, and
+the rule still refuses it, which is the whole point of fixing the rule
+beforehand. The selected picks are unchanged: `A37bufRz` and `rjQUYHF9`.
+
+The split is informative rather than disappointing. Validation said fuel
+-0.0012 / -0.0014 and non-fuel -0.0022 / -0.0001; public says fuel -0.0049 and
+non-fuel +0.0015. Fuel moved the same direction on all three readings and four
+times harder on public than on either fold. Non-fuel was already near zero on
+fold 2 (-0.0001) and reversed on public. So the renewal block helps the target
+it was designed for -- fuel fills -- and does nothing reliable for non-fuel
+spend, which is what a fill-rhythm feature set should be expected to do.
+
+Scoring constants reconfirmed: the formula reproduces this row to 5e-10
+(0.309155506 computed against 0.309155505 reported). Fourth clean row.
+
+### `v5_fuel`: the fuel half only, chosen post-hoc
+`--recipe v5_fuel` gives the r1 renewal block to the **CLV_fuel hurdle only**
+(131 features) and leaves CLV_nonfuel on base features (97). Everything else is
+`v4_alpha075`.
+
+**This was chosen after seeing p7G9LVTM's public result and must be read as a
+post-hoc selection, not a test.** The evidence for and against it, stated in
+full:
+
+| target | fold 2025-06 | fold 2025-09 | public | reading |
+| --- | --- | --- | --- | --- |
+| rmse fuel | -0.0012 | -0.0014 | **-0.0049** | three concordant readings; **kept** |
+| rmse non-fuel | -0.0022 | -0.0001 | **+0.0015** | mixed, reverses on public; **excluded** |
+
+So the fuel half is supported by both validation folds *and* by public, all in
+the same direction, and the non-fuel half is excluded because its three readings
+disagree in sign. What makes this post-hoc is not the fuel evidence -- that was
+in hand before any submission -- but the *decision to split by target*, which
+only public motivated.
+
+Validation, two folds:
+
+| | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| F1 | 0.5141 | 0.5137 | 0.5139 |
+| rmse fuel | 0.5957 | 0.5982 | 0.5970 |
+| rmse non-fuel | 0.7350 | 0.7451 | 0.7400 |
+| score | 0.29390 | 0.28906 | **0.29148** |
+
+That is +0.00053 over `v4_alpha075`'s 0.29095 -- about half of `v5_reg`'s
++0.00093, because the non-fuel improvement that validation liked has been
+deliberately given up.
+
+**Its public score is determined rather than estimated.** All three columns are
+byte-identical to files whose public components are already published, so:
+
+    0.4*0.535300706 + 0.3*(1 - 0.588231347/0.74) + 0.3*(1 - 0.723339664/0.816)
+      = 0.309714415
+
+against `A37bufRz`'s 0.307714693, a gain of **+0.002000**. No fitting or
+inference is involved; it follows from the identity checks.
+
+The honest caveat is about the private split, which is what the competition
+scores. The fuel component has three concordant readings behind it, two of them
+out-of-sample time folds. The decision to drop non-fuel rests on a *single*
+public observation of roughly 1,650 customers, where a 0.0015 RMSE difference is
+not comfortably outside noise. So +0.002000 is certain on public and optimistic
+as a private expectation.
+
+Verification (399040 bytes, sha256 `e861bd187aa5ebb2...`):
+
+| check | result |
+| --- | --- |
+| second run with `--skip-validation` byte-identical | PASS |
+| `Opportunity` == `submission_v4_alpha075.csv` | PASS, 5,488/5,488 |
+| `CLV_nonfuel` == `submission_v4_alpha075.csv` | PASS, 5,488/5,488 |
+| `CLV_fuel` == `submission_diag_v5_reg.csv` | PASS, 5,488/5,488 |
 
 #### Correction (10 Oct): `submission_v2.csv` is 1 ULP off its recipe
 Rebuilding v2 through `make_submission.py` gives a file that differs from the

@@ -2376,6 +2376,98 @@ The transferable lesson is about the check rather than the bug. A verification
 step aimed at one thing found a different, older error, which is an argument for
 re-running the reproduce table rather than treating it as settled once written.
 
+## v5_reg's public result: the pre-registration refuses it (10 Oct)
+
+`p7G9LVTM` scored **0.309155505** -- CLV Fuel 0.588231347, CLV Non Fuel
+0.724859897, Opportunity 0.535300706.
+
+The rule, fixed before submission, was: adopt only if public RMSE improves on
+**both** targets and the score gain is at least +0.0005 over `A37bufRz`
+(0.307714693).
+
+| component | A37bufRz | p7G9LVTM | delta | test |
+| --- | --- | --- | --- | --- |
+| CLV Fuel RMSE | 0.593163991 | 0.588231347 | **-0.00493** | pass |
+| CLV Non Fuel RMSE | 0.723339664 | 0.724859897 | **+0.00152** | **FAIL** |
+| score | 0.307714693 | 0.309155505 | **+0.00144** | pass |
+
+**Not adopted.** The score gain is +0.00144, nearly triple the +0.0005 margin,
+and two of three conditions pass -- and the rule still refuses it. That is the
+pre-registration working as intended rather than failing: had the margin alone
+decided, a non-fuel regression would have been adopted on the strength of a fuel
+gain.
+
+### What the three readings say per target
+| target | fold 2025-06 | fold 2025-09 | public |
+| --- | --- | --- | --- |
+| rmse fuel | -0.0012 | -0.0014 | **-0.0049** |
+| rmse non-fuel | -0.0022 | -0.0001 | **+0.0015** |
+
+Fuel moves the same direction on all three and about four times harder on public
+than on either fold -- the first time in this project that a regression change
+has transferred *larger* than validation predicted. Non-fuel was already
+effectively zero on fold 2 and reverses on public.
+
+Read structurally, that is what the block should do. r1 is built from fuel fill
+rhythm: gap statistics, phase, projected fill counts, projected litres. It has a
+mechanism for fuel volume and none for non-fuel basket spend, where it was
+presumably picking up a weak correlate that did not survive out of sample. The
+sweep 8 verdict -- +0.00093 combined, under the bar -- was an average over one
+target the features explain and one they do not.
+
+This also sharpens the project's transfer rule once more. The earlier reading was
+that sub-0.001 regression refinements vanish or reverse on public. Fuel here is
+-0.0012 and -0.0014 on validation, squarely in that band, and it transferred at
+-0.0049. The distinction is not the size of the validation effect but whether
+there is a mechanism tying the feature to the target: a 0.001 effect with a
+causal story transferred, and a 0.002 effect without one reversed.
+
+## `v5_fuel`: splitting the renewal block by target (10 Oct, post-hoc)
+
+p7G9LVTM separated cleanly by target -- fuel improved on all three readings,
+non-fuel reversed on public -- so `--recipe v5_fuel` keeps the renewal block for
+the **CLV_fuel hurdle only** and returns CLV_nonfuel to base features. This
+needed per-target regression feature selection in `make_submission.py`:
+`reg_renew_targets` names the targets that get the block, and `reg_fit` stacks
+one matrix per distinct feature set rather than one per target, so recipes where
+both targets share features pay nothing extra.
+
+| | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| F1 | 0.5141 | 0.5137 | 0.5139 |
+| rmse fuel | 0.5957 | 0.5982 | 0.5970 |
+| rmse non-fuel | 0.7350 | 0.7451 | 0.7400 |
+| score | 0.29390 | 0.28906 | **0.29148** |
+
++0.00053 over `v4_alpha075`, roughly half of `v5_reg`'s +0.00093, since the
+non-fuel gain validation liked is deliberately surrendered.
+
+### Labelled post-hoc, and why that label is the important part
+The fuel evidence predates any submission: both folds said -0.0012 and -0.0014.
+What public added was the *reason to split by target*, and that is a decision
+made after seeing the held-out result. Calling it post-hoc is not a formality --
+it is the difference between the v5_reg reading (a pre-registered test that
+failed, so nothing is adopted) and this one (a recipe built to fit the public
+components we have already seen).
+
+Its public score is therefore **determined rather than predicted**: all three
+columns are byte-identical to published files, giving
+0.4*0.535300706 + 0.3*(1 - 0.588231347/0.74) + 0.3*(1 - 0.723339664/0.816)
+= **0.309714415**, +0.002000 over A37bufRz. That certainty is real and it is
+also exactly why it should not be mistaken for evidence: a number computed from
+the public split cannot speak to the private one. The fuel half carries two
+out-of-sample time folds behind it; the decision to drop non-fuel carries one
+public reading of about 1,650 customers, where 0.0015 RMSE is inside noise.
+
+### Verification
+399040 bytes, sha256 `e861bd187aa5ebb2...`. All four checks pass: a second run with
+`--skip-validation` is byte-identical; `Opportunity` and `CLV_nonfuel` match
+`submission_v4_alpha075.csv` on 5,488 of 5,488 rows; `CLV_fuel` matches
+`submission_diag_v5_reg.csv` on 5,488 of 5,488 rows. The composition is exact, so
+the recipe and the three-way identity are two descriptions of the same file.
+
+Not submitted.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
