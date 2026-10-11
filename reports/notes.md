@@ -2598,6 +2598,57 @@ is simply not measured, so it is left unreported rather than guessed. A figure
 that must exclude suspend would need `time.process_time()`, or
 `time.perf_counter()` under a no-sleep policy.
 
+## Sweep 9 resolved, and the clearest transfer result in the project (11 Oct)
+
+`v5_fuel2` (`nskGdBPf`) scored **0.309785160**, fuel RMSE **0.588056839** against
+`v5_fuel`'s 0.588231347. The pre-registered test -- public fuel RMSE must improve
+-- passed by -0.000175, so it is **adopted** as selected pick 1.
+
+The score gain is +0.000071. The interesting number is not that, it is the ratio:
+
+| change | validation | public | ratio |
+| --- | --- | --- | --- |
+| r1 for fuel, mechanism-backed | 0.00130 | **0.004933** | **3.8x amplified** |
+| r1+r2+r3 increment, interaction only | 0.00075 | 0.000175 | **0.23x attenuated** |
+
+Two changes to the same target, in the same feature family, at the same seeds,
+under the same decision rule, with validation gains of the same order. One
+transferred at nearly four times its validation size; the other at under a
+quarter. The difference is that r1 has a causal story for fuel volume -- fill
+gaps, phase, projected fill counts -- and helps on both folds standalone, while
+r2 and r3 each make fuel RMSE *worse* standalone and only help in combination.
+
+That caveat was written down **before** the submission, which is what makes this
+evidence rather than hindsight. The project's transfer rule has now been through
+three revisions and lands here:
+
+- the first version was "simple constants transfer, fitted procedures do not" --
+  too strong, corrected when three decision rules on one probability model
+  showed the fitted machinery was neutral and one scalar inside it was worth
+  +0.0064;
+- the second was "sub-0.001 regression refinements vanish or reverse" --
+  falsified by r1 for fuel, which is -0.0013 on validation and -0.0049 on public;
+- the current one: **whether a feature has a mechanism tying it to the target
+  predicts transfer better than the size of its validation effect does.**
+
+Adopted because the rule said so and the downside is bounded: Opportunity and
+CLV_nonfuel are byte-identical across all three files, so the only thing that can
+differ on private is a fuel column that both folds and public agree on. Expect
+about +0.00007, not more.
+
+### Modelling is closed
+Nine sweeps, 73 variants, four kept changes, plus the two fuel-regression steps
+that were adopted through pre-registered public tests rather than the validation
+bar. Validation 0.28164 -> 0.29178; public 0.2974 -> 0.309785.
+
+The remaining levers are all measured and all closed: the 17-class softmax is a
+local optimum in label structure, the GBDT fit is saturated (XGBoost within
+0.00017), the decision rule sits on a broad alpha plateau whose parameter-free
+version already recovers 85% of its gain, adoption classes are unmonetisable
+even with an oracle, raw-space regression routes lose to the Jensen bias, gate
+calibration is closed by the gate already being well calibrated out of sample,
+and the renewal direction has now gone from 3.8x to 0.23x transfer in two steps.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
