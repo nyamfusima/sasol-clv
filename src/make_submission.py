@@ -9,6 +9,7 @@
     python src/make_submission.py --recipe v5_reg       # pre-registered diagnostic
     python src/make_submission.py --recipe v5_fuel      # post-hoc, fuel only
     python src/make_submission.py --recipe v5_fuel2     # sweep 9: r1+r2+r3 for fuel
+    python src/make_submission.py --recipe v5_fuel2_a050 # the same, alpha 0.5 hedge
 
 Each recipe builds every snapshot in memory, prints the per-fold and mean
 validation score, validates the output, and reports its runtime. Needs only
@@ -103,6 +104,15 @@ RECIPES = {
     'v5_fuel2':   dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
                        reg_renew_targets=('CLV_fuel',), renew_blocks=('r1', 'r2', 'r3'),
                        rule='prior', alpha=0.75),
+    # The alpha 0.5 hedge, brought up to date. The second selected pick was
+    # still carrying the original base-feature fuel regressions, so if alpha 0.5
+    # turns out to be right on the private split it would have scored without
+    # the fuel improvement that both folds and two public readings support.
+    # Identical to v5_fuel2 except alpha; its Opportunity column equals
+    # submission_v4_hybrid.csv and its CLV columns equal submission_v5_fuel2.csv.
+    'v5_fuel2_a050': dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
+                          reg_renew_targets=('CLV_fuel',),
+                          renew_blocks=('r1', 'r2', 'r3'), rule='prior', alpha=0.5),
 }
 DEFAULT_OUT = {k: f'submissions/submission_{k}.csv' for k in RECIPES}
 DEFAULT_OUT['v5_reg'] = 'submissions/submission_diag_v5_reg.csv'

@@ -14,6 +14,7 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | 2026-10-10 | submission_diag_v5_reg.csv | v4_alpha075 with the r1 renewal block added to the hurdle regressions (131 regression features, 20 seeds). Opportunity column **identical on all 5,488 rows** to submission_v4_alpha075.csv | 0.5982 | 0.7450 | 0.5139 | **0.3092** | Zindi ID **p7G9LVTM**. Public 0.309155505 = F1 0.535300706 / rmse 0.588231347 / 0.724859897. Pre-registered rule: adopt only if public RMSE improves on BOTH targets and the score gain is at least +0.0005 over A37bufRz. Fuel -0.00493 **pass**, non-fuel +0.00152 **FAIL**, score +0.00144 pass. The both-targets clause fails, so **v5_reg is NOT adopted** |
 | 2026-10-10 | submission_v5_fuel.csv | **POST-HOC.** v4_alpha075 except the CLV_fuel hurdle uses base + r1 renewal (131 features); CLV_nonfuel stays on base (97). Opportunity and CLV_nonfuel identical to submission_v4_alpha075.csv on all 5,488 rows; CLV_fuel identical to submission_diag_v5_reg.csv | 0.5982 | 0.7451 | 0.5139 | **0.3097** | Zindi ID **DapJS5NA**. Public **0.309714414**, rank **31**. validation **0.29148** (+0.00053 over v4_alpha075). Because all three columns are byte-identical to their sources, its public score is **determined, not estimated**: 0.4*0.535300706 + 0.3*(1-0.588231347/0.74) + 0.3*(1-0.723339664/0.816) = **0.309714415**, +0.002000 over A37bufRz. The per-target split was chosen **after** seeing p7G9LVTM's public result |
 | 2026-10-11 | submission_v5_fuel2.csv | sweep 9: v5_fuel with all three renewal blocks for the CLV_fuel hurdle (163 fuel features, 97 non-fuel). Opportunity and CLV_nonfuel identical to submission_v4_alpha075.csv on all 5,488 rows | 0.5979 | 0.7451 | 0.5139 | **0.30979** | Zindi ID **nskGdBPf**. Public 0.309785160 = F1 0.535300706 / rmse **0.588056839** / 0.723339664. Pre-registered test was "public CLV Fuel RMSE improves on 0.588231347": it did, by **-0.000175**, so **ADOPTED** as selected pick 1. Validation 0.29178. Caveat recorded in advance: r2 and r3 each worsen fuel RMSE standalone, so the gain is an interaction, and it transferred at 0.23x against r1's 3.8x |
+| 2026-10-11 | submission_v5_fuel2_a050.csv | the alpha 0.5 hedge brought up to date: v5_fuel2 regressions with alpha 0.5. Opportunity identical to submission_v4_hybrid.csv and both CLV columns identical to submission_v5_fuel2.csv, all on 5,488/5,488 rows | 0.5979 | 0.7451 | 0.5132 | not submitted | validation **0.29151** (+0.00083 over v4_hybrid). Public score is **determined**: 0.4*0.528896416 + 0.3*(1-0.588056839/0.74) + 0.3*(1-0.723339664/0.816) = **0.307223445**, +0.002070 over rjQUYHF9 |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, prior matching alpha 0.5. **Classifier 20 seeds; CLV columns were built at 5 seeds, not 20** -- a frozen default argument swallowed the seed override (found 9 Oct, see notes). Re-measured at matched seeds the difference is +0.00021 in score, so the row stands | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate at the time, not selected |
 | 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and is the **selected** one. validation 0.29068 |
 | 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude). CLV built at **5 seeds, not 20** -- same frozen-default bug | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086 at 5 seeds) |
@@ -106,6 +107,7 @@ one parameter the evidence is split on.
 | `submission_diag_v5_reg.csv` | p7G9LVTM | 0.309155505 | **0.29188** | diagnostic, **not adopted** (both-targets clause failed) |
 | `submission_v5_fuel.csv` | **DapJS5NA** | **0.309714414** (rank 31) | **0.29148** | superseded by v5_fuel2 |
 | `submission_v5_fuel2.csv` | **nskGdBPf** | **0.309785160** | **0.29178** | **SELECTED pick 1** |
+| `submission_v5_fuel2_a050.csv` | - | not submitted (0.307223445 determined) | **0.29151** | proposed **pick 2**, replacing rjQUYHF9 |
 
 \* the folds disagree about alpha 0.75: +0.0046 F1 on fold 1, -0.0032 on fold 2.
 
@@ -266,6 +268,41 @@ fifth public row reproducing the scoring formula to 1e-9, so 0.74 and 0.816 are
 settled beyond argument.
 
 Gain over `A37bufRz`: **+0.002000**, exactly as predicted. Rank 37 to 31.
+
+### The second pick was stale (11 Oct)
+Pick 1 was upgraded twice on the fuel regressions -- base -> r1 -> r1+r2+r3 --
+and pick 2 was never brought along. `rjQUYHF9` still carried the original
+base-feature fuel hurdle, so if alpha 0.5 turns out to be right on the private
+split, the hedge would have scored **without** the fuel improvement that two
+validation folds and two public readings all support.
+
+`submission_v5_fuel2_a050.csv` fixes that: identical to `v5_fuel2` except
+alpha 0.5. Its public score is **determined** by composition, since its
+Opportunity column is `v4_hybrid`'s and its CLV columns are `v5_fuel2`'s:
+
+    0.4*0.528896416 + 0.3*(1 - 0.588056839/0.74) + 0.3*(1 - 0.723339664/0.816)
+      = 0.307223445
+
+against `rjQUYHF9`'s 0.305152978, a gain of **+0.002070**.
+
+| | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| v4_hybrid (the old hedge) | 0.29177 | 0.28959 | 0.29068 |
+| **v5_fuel2_a050** | **0.29260** | **0.29043** | **0.29151** |
+
+Verified: `Opportunity` identical to `submission_v4_hybrid.csv` and both CLV
+columns identical to `submission_v5_fuel2.csv`, 5,488/5,488 rows each.
+
+**The two picks now differ in exactly one thing -- alpha -- which is the one
+parameter the two validation folds genuinely disagree about.** That is what the
+hedge was always meant to be, and until now it was quietly also hedging the fuel
+regressions, where the evidence does not disagree at all.
+
+The general lesson for the record: when a pipeline is improved incrementally,
+every *selected* artifact has to be re-derived, not just the best one. The second
+pick was three improvements behind and nothing in the process flagged it, because
+every check compared a new file against the file it was derived from rather than
+against the full selected set.
 
 ### Sweep 9 resolved: v5_fuel2 ADOPTED (11 Oct)
 `nskGdBPf` scored **0.309785160** (CLV Fuel 0.588056839, CLV Non Fuel

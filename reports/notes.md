@@ -2649,6 +2649,86 @@ even with an oracle, raw-space regression routes lose to the Jensen bias, gate
 calibration is closed by the gate already being well calibrated out of sample,
 and the renewal direction has now gone from 3.8x to 0.23x transfer in two steps.
 
+## Fixing a stale second pick (11 Oct)
+
+Pick 1's fuel regressions were upgraded twice -- base to r1 to r1+r2+r3 -- and
+pick 2 was never brought along. `rjQUYHF9` still carried the original
+base-feature fuel hurdle. If alpha 0.5 is the right call on the private split,
+the hedge would have scored without a fuel improvement that **two validation
+folds and two public readings** all agree on.
+
+`--recipe v5_fuel2_a050` is `v5_fuel2` with alpha 0.5. Validation 0.29151
+against `v4_hybrid`'s 0.29068, and its public score is determined by composition
+at **0.307223445**, +0.002070 over `rjQUYHF9`.
+
+Verified: Opportunity identical to `submission_v4_hybrid.csv`, both CLV columns
+identical to `submission_v5_fuel2.csv`, 5,488/5,488 rows each.
+
+**Why this matters beyond the 0.002.** The two picks now differ in exactly one
+thing, alpha, which is the single parameter the two folds genuinely disagree
+about. Until now the pair was also silently hedging the fuel regressions, where
+there is no disagreement to hedge -- both folds and both public readings point
+the same way. A hedge that spans a settled question wastes the slot.
+
+The process lesson: **every selected artifact has to be re-derived when the
+pipeline improves, not just the best one.** Nothing in this project's checks
+caught it, because each new file was verified against the file it was derived
+from rather than against the current selected set. A useful standing check would
+be: for each selected pick, is every component the best available version of
+that component?
+
+## What is and is not still available at rank 31
+
+Two free searches closed on 11 Oct, both run on cached probabilities with no
+refits.
+
+**Probability ensembling across the three cached 20-seed classifiers: nothing.**
+
+| model | alpha 0.5 | alpha 0.75 |
+| --- | --- | --- |
+| bag20 (base) | 0.5098 | 0.5078 |
+| lags20 (base+lags) | 0.5132 | 0.5139 |
+| r320 (base+lags+r3) | 0.5134 | **0.5147** |
+| bag20 + lags20 | 0.5117 | 0.5108 |
+| lags20 + r320 | 0.5146 | 0.5140 |
+| all three | 0.5128 | 0.5129 |
+
+No combination beats the best single model. bag20 is far enough behind that
+averaging it in drags the result down, and the two lag-based models are too
+correlated to diversify.
+
+**Expected-F1 decoding stacked on alpha-damped probabilities: actively harmful.**
+
+| | lags20 | r320 |
+| --- | --- | --- |
+| argmax | 0.5009 | 0.5023 |
+| argmax + expected-F1 | 0.5119 | 0.5141 |
+| alpha 0.5 | 0.5132 | 0.5134 |
+| alpha 0.5 + expected-F1 | 0.5104 | 0.5089 |
+| alpha 0.75 | 0.5139 | 0.5147 |
+| alpha 0.75 + expected-F1 | 0.5042 | 0.5035 |
+
+The damage grows with alpha (-0.003 at 0.5, -0.010 at 0.75), which is the
+signature of double-counting: both rules push probability mass toward rare
+classes, so applying them in series over-corrects. Sweep 7 had speculated they
+might be complementary because they move different degrees of freedom; they are
+not.
+
+### The gap to the top, and why not to chase it
+Rank gradient from our own three readings: 0.305 to 0.308 moved rank 49 to 37
+(0.00021 per place), 0.308 to 0.310 moved 37 to 31 (0.00035 per place). Rank 31
+to rank 10 is 21 places, so roughly **+0.008**.
+
+Sweep 1 measured what 17-class weight tuning is worth: **+0.0096 in-fold at
+n about 5,100, +0.0013 held-out.** Scaled to the roughly 1,650 customers in the
+public split, that predicts about +0.017 of tunable public F1, or **+0.0068 of
+score** -- nearly exactly the gap to the top ten.
+
+Those two numbers matching is the signature of a public-tuned field above us,
+and it is the reason not to join them: about 86% of that gain is overfitting by
+our own measurement, against a private split of about 3,838 customers that
+nothing has been fitted to.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
