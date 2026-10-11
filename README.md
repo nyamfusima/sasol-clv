@@ -16,7 +16,8 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | **v4_alpha075 — same, α 0.75** | 0.29095\* | **0.3077** | **selected**, rank 37 |
 | v4_simple — lag classifier, Fuel ×1.25 rule | 0.28796 | 0.3049 | submitted, not selected |
 | v5_reg — renewal features in both hurdles | 0.29188 | 0.3092 | diagnostic, not adopted |
-| **v5_fuel — renewal in the fuel hurdle only** | 0.29148 | **0.3097** | **best public**, rank 31 |
+| **v5_fuel — renewal r1 in the fuel hurdle** | 0.29148 | **0.3097** | **best public**, rank 31 |
+| v5_fuel2 — renewal r1+r2+r3 in the fuel hurdle | 0.29178 | — | not submitted |
 
 Validation is the mean of two time-based folds; see
 [Validation protocol](#validation-protocol).
@@ -101,7 +102,8 @@ validation score, validates the output before writing, and reports its runtime.
 | **v4_hybrid** | 42–61 | yes | no | prior matching, α 0.5 | selected |
 | **v4_alpha075** | 42–61 | yes | no | prior matching, α 0.75 | selected |
 | `v5_reg` | 42–61 | yes | renewal (both targets) | prior matching, α 0.75 | diagnostic, **not adopted** |
-| `v5_fuel` | 42–61 | yes | renewal (fuel only) | prior matching, α 0.75 | **post-hoc** candidate |
+| `v5_fuel` | 42–61 | yes | renewal r1 (fuel only) | prior matching, α 0.75 | **best public**, rank 31 |
+| `v5_fuel2` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | sweep 9, not submitted |
 | v4_lags | 42–61 | yes | yes | prior matching, α 0.5 | |
 | v4_simple | 42–61 | yes | no | Fuel ×1.25 | hedge |
 | v3 | 42–61 | no | no | prior matching, α 0.5 | |

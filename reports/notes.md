@@ -2512,6 +2512,92 @@ So the honest final statement on this variant is: **it fails on effect size,
 with +0.00079 roughly half the bar, and it was never the case that the folds
 disagreed about its sign.**
 
+## Sweep 9: renewal blocks for the CLV_fuel hurdle only (10-11 Oct)
+
+v5_fuel's public result showed the r1 renewal block transferring *larger* than
+validation predicted on fuel (-0.0012 / -0.0014 on the folds, -0.0049 on public)
+while reversing on non-fuel. That is the only change in the project to transfer
+larger, and it has a mechanism -- r1 is fuel fill rhythm, so it has a causal
+story for fuel volume and none for non-fuel basket spend. Sweep 9 follows that
+one direction and touches nothing else.
+
+Fuel-only fitting halves the cost of a regression run, so a dedicated
+`fuel_rmse` was written for it. Two checks that it computes the same thing as
+`reg_rmses`: the base row reproduces the known 5-seed figures 0.5975 / 0.5994
+exactly, and the r1 row reproduces sweep 8's 20-seed figures 0.5957 / 0.5982
+exactly.
+
+**Pre-registered before any result was seen** (in the module docstring): adopt
+only if, at 20 seeds, fuel RMSE improves against the r1 incumbent on BOTH folds;
+and if submitted, replace the selected pick only if public CLV Fuel RMSE also
+improves on 0.588231347.
+
+### 20-seed confirmation
+| variant | cols | fold 2025-06 | fold 2025-09 | mean delta | both folds |
+| --- | --- | --- | --- | --- | --- |
+| r1 [incumbent] | 34 | 0.5957 | 0.5982 | - | - |
+| r2 all-basket | 23 | -0.0018 | **+0.0003** | -0.00075 | no |
+| r1 + r2 | 57 | -0.0011 | **+0.0003** | -0.00040 | no |
+| r1 + r3 | 43 | -0.0003 | -0.0005 | -0.00040 | **YES** |
+| **r1 + r2 + r3** | 66 | -0.0012 | -0.0003 | **-0.00075** | **YES** |
+
+The 5-seed screen was reliable here: both variants that failed it still failed at
+20 seeds, and both that passed still passed. All five were re-measured at 20
+seeds rather than only the screen-passers, so the final table is not a selection
+made after seeing which way the noise fell.
+
+`r1 + r2 + r3` was taken on the mean. `r1 + r3` also passed and is more
+fold-balanced (38% of its gain from fold 1 against 80%), but at half the effect.
+
+### The caveat that matters: this is an interaction, not additive signal
+**r2 and r3 each make fuel RMSE worse on their own.** r2 is +0.0003 on fold 2 at
+20 seeds; r3 was worse on both folds in the screen (+0.0021 / +0.0008). Only in
+combination with r1 do they help. That is weaker evidence than v5_fuel had, where
+r1 helped standalone on both folds *and* on public, and it is the kind of effect
+this project has repeatedly watched evaporate. The expected score impact is
+**+0.00030**, roughly a seventh of what v5_fuel delivered.
+
+What makes the public test unusually informative here is that public and private
+are a random split of the **same** test cutoff -- about 1,650 and 3,838 of the
+same 5,488 customers -- so a public fuel-RMSE reading transfers to private far
+more directly than a time-generalisation question would.
+
+### `--recipe v5_fuel2`
+Same shape as `v5_fuel` (renewal for the fuel hurdle only, Opportunity and
+CLV_nonfuel untouched) with `renew_blocks=('r1','r2','r3')`. 163 fuel regression
+features against 97 for non-fuel.
+
+| | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| v4_alpha075 | 0.29343 | 0.28847 | 0.29095 |
+| v5_fuel | 0.29392 | 0.28903 | 0.29148 |
+| **v5_fuel2** | **0.29441** | **0.28915** | **0.29178** |
+
++0.00030 over v5_fuel, matching the sweep 9 prediction exactly, and its fuel
+RMSEs (0.5945 / 0.5979) reproduce the sweep 9 confirmation to four digits.
+
+Verified (399,074 bytes, sha256 `95e61304e951c23a...`): determinism
+byte-identical across two runs; `Opportunity` and `CLV_nonfuel` identical to
+`submission_v4_alpha075.csv` on 5,488/5,488 rows each; `CLV_fuel` differs from
+`submission_v5_fuel.csv` on all rows, max shift 0.30539; CLV min 0.02664.
+
+Not submitted.
+
+### A timing caveat: `time.monotonic()` counts system suspend on Windows
+The determinism rerun reported a runtime of 44,809 s. It did not take 12 hours;
+the machine slept overnight between the build finishing (10-10 22:51) and the
+rerun finishing (10-11 11:18). Python's `time.monotonic()` on Windows is backed
+by `GetTickCount64`, which **includes** time spent suspended.
+
+This project already switched from `time.time()` to `time.monotonic()` after a
+wall-clock adjustment corrupted a timing report. Monotonic fixes clock
+adjustments but not suspend, so **any recorded runtime for a run that spanned a
+sleep is overstated**. No previously recorded figure is affected -- all of them
+are plausible and consistent with each other -- and the rerun's true compute time
+is simply not measured, so it is left unreported rather than guessed. A figure
+that must exclude suspend would need `time.process_time()`, or
+`time.perf_counter()` under a no-sleep policy.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?

@@ -8,6 +8,7 @@
     python src/make_submission.py --recipe v2
     python src/make_submission.py --recipe v5_reg       # pre-registered diagnostic
     python src/make_submission.py --recipe v5_fuel      # post-hoc, fuel only
+    python src/make_submission.py --recipe v5_fuel2     # sweep 9: r1+r2+r3 for fuel
 
 Each recipe builds every snapshot in memory, prints the per-fold and mean
 validation score, validates the output, and reports its runtime. Needs only
@@ -93,6 +94,15 @@ RECIPES = {
     # is excluded. This is not a pre-registered test and must be read as one.
     'v5_fuel':    dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
                        reg_renew_targets=('CLV_fuel',), rule='prior', alpha=0.75),
+    # Sweep 9. Same shape as v5_fuel -- renewal for the fuel hurdle only -- but
+    # with all three renewal blocks instead of r1 alone. Pre-registered rule was
+    # "improves fuel RMSE on BOTH folds at 20 seeds against r1"; this passed at
+    # -0.0012 / -0.0003 (r1+r3 also passed, at -0.0003 / -0.0005, and lost on
+    # the mean). Caveat recorded in the notes: r2 and r3 each make fuel RMSE
+    # WORSE on their own, so the gain is an interaction, not additive signal.
+    'v5_fuel2':   dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
+                       reg_renew_targets=('CLV_fuel',), renew_blocks=('r1', 'r2', 'r3'),
+                       rule='prior', alpha=0.75),
 }
 DEFAULT_OUT = {k: f'submissions/submission_{k}.csv' for k in RECIPES}
 DEFAULT_OUT['v5_reg'] = 'submissions/submission_diag_v5_reg.csv'
@@ -224,11 +234,15 @@ def build_snapshots(d, cfg, cats, cutoffs, with_lags, with_renew=False, verbose=
     renew = None
     if with_renew:
         import features5 as F5     # numpy/pandas only, like features3
+        blocks = with_renew if isinstance(with_renew, (list, tuple)) else ('r1',)
         renew = {}
         for c in cutoffs:
             if verbose:
-                print(f'  renewal features {c}', flush=True)
-            renew[c] = F5.build_r1(d, c, snaps[c][0].index, cfg)
+                print(f'  renewal features {c} ({"+".join(blocks)})', flush=True)
+            f = F5.BUILDERS[blocks[0]](d, c, snaps[c][0].index, cfg)
+            for b in blocks[1:]:
+                f = f.join(F5.BUILDERS[b](d, c, snaps[c][0].index, cfg))
+            renew[c] = f
     return snaps, lags, renew
 
 
@@ -350,7 +364,7 @@ def main():
     cutoffs = monthly()
     need_lags = rec['clf_lags'] or rec['reg_lags']
     print(f'building {len(cutoffs) + 1} snapshots from {a.train}')
-    need_renew = bool(rec.get('reg_renew') or rec.get('reg_renew_targets'))
+    need_renew = rec.get('renew_blocks', ('r1',))         if (rec.get('reg_renew') or rec.get('reg_renew_targets')) else False
     snaps, lags, renew = build_snapshots(d, cfg, cats, cutoffs + [TEST_CUTOFF],
                                          need_lags, need_renew)
     XC = clf_extra(rec, lags)
