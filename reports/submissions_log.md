@@ -290,8 +290,10 @@ against `rjQUYHF9`'s 0.305152978, a gain of **+0.002070**.
 | v4_hybrid (the old hedge) | 0.29177 | 0.28959 | 0.29068 |
 | **v5_fuel2_a050** | **0.29260** | **0.29043** | **0.29151** |
 
-Verified: `Opportunity` identical to `submission_v4_hybrid.csv` and both CLV
-columns identical to `submission_v5_fuel2.csv`, 5,488/5,488 rows each.
+Verified (393,143 bytes, sha256 `f992acc3301b9db1...`): a second run with
+`--skip-validation` is byte-identical; `Opportunity` identical to
+`submission_v4_hybrid.csv` and both CLV columns identical to
+`submission_v5_fuel2.csv`, 5,488/5,488 rows each.
 
 **The two picks now differ in exactly one thing -- alpha -- which is the one
 parameter the two validation folds genuinely disagree about.** That is what the
