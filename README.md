@@ -18,10 +18,18 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | v5_reg — renewal features in both hurdles | 0.29188 | 0.3092 | diagnostic, not adopted |
 | v5_fuel — renewal r1 in the fuel hurdle | 0.29148 | 0.3097 | superseded |
 | **v5_fuel2 — renewal r1+r2+r3 in the fuel hurdle** | 0.29178 | **0.3098** | **selected pick 1** |
-| **v5_fuel2_a050 — the same at α 0.5** | 0.29151 | 0.3072† | **selected pick 2** |
+| **v5_fuel2_a050 — the same at α 0.5** | 0.29151 | 0.3072† | built and verified, **not yet submitted**; proposed pick 2 |
 
 Validation is the mean of two time-based folds; see
 [Validation protocol](#validation-protocol).
+
+† `v5_fuel2_a050`'s public figure is **determined, not measured**: all three of
+its columns are byte-identical to files whose public components are already
+published, so the formula fixes it at 0.307223445. It has **not been uploaded**,
+and a determined score cannot be selected -- the second Zindi pick is still
+`rjQUYHF9` (v4_hybrid, 0.305152978), which carries the superseded base-feature
+fuel hurdle. Submitting this file and reselecting is worth **+0.002070** on the
+hedge slot and is the one action still outstanding.
 
 `v5_fuel`'s score was **computed before it was submitted**: its three columns
 are byte-identical to files whose public components were already published, so
@@ -106,7 +114,7 @@ validation score, validates the output before writing, and reports its runtime.
 | `v5_reg` | 42–61 | yes | renewal (both targets) | prior matching, α 0.75 | diagnostic, **not adopted** |
 | `v5_fuel` | 42–61 | yes | renewal r1 (fuel only) | prior matching, α 0.75 | **best public**, rank 31 |
 | **`v5_fuel2`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | **selected** |
-| **`v5_fuel2_a050`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | **selected** (hedge) |
+| **`v5_fuel2_a050`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | proposed hedge, not yet submitted |
 | v4_lags | 42–61 | yes | yes | prior matching, α 0.5 | |
 | v4_simple | 42–61 | yes | no | Fuel ×1.25 | hedge |
 | v3 | 42–61 | no | no | prior matching, α 0.5 | |
