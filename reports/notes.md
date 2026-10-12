@@ -1476,7 +1476,7 @@ so the artifact we might submit is the one the documented recipe produces.
 Consequence to record: its CLV columns are now within 1 ULP of
 `submission_v3.csv` rather than bit-identical to them. That does not affect the
 inferred public score, since RMSE at four decimals cannot see 4e-16, and
-`submission_v3.csv` itself is untouched (it is already submitted and selected).
+`submission_v3.csv` itself is untouched (it was already submitted and, at that date, selected).
 
 ### submission_v4_simple.csv -- the second-pick hedge
 The Fuel-growth weight was re-validated on the lag classifier's probabilities
@@ -1552,7 +1552,7 @@ the true time at 53 min by subtracting the apparent jump, and the measured value
 is 80 min. The subtraction was the wrong instrument -- a monotonic measurement in
 a clean environment is the right one.
 
-## Correction to the record (8 Oct): v4_hybrid was submitted and is selected
+## Correction to the record (8 Oct): v4_hybrid was submitted and was selected
 
 Earlier entries described `submission_v4_hybrid.csv` as never submitted with an
 inferred public score, and the final picks as v4_lags and v3. Both were wrong.
@@ -1560,7 +1560,7 @@ inferred public score, and the final picks as v4_lags and v3. Both were wrong.
 - `submission_v4_hybrid.csv` **was** submitted on 8 Oct: public **0.305152978**,
   components F1 0.528896416 / RMSE fuel 0.593163991 / RMSE non-fuel 0.723339664,
   rank 49, Zindi ID Bb8Js9A2.
-- The selected picks are **v4_hybrid and v3**, not v4_lags and v3.
+- The selected picks were then **v4_hybrid and v3**, not v4_lags and v3.
 - The submitted version was the pre-promotion file (CLV copied bit-for-bit from
   v3). The committed version is the `--recipe v4_hybrid` output, whose CLV
   differs by 1 ULP because the two code paths sum per-seed predictions in
@@ -1624,7 +1624,7 @@ It stops short of settling the matter for three reasons.
   about 3,838 customers that nothing has been fitted to.
 
 ### Why carrying both is the right response
-The selection is **v4_alpha075 and v4_hybrid (alpha 0.5)**. That hedges the
+The selection was then **v4_alpha075 and v4_hybrid (alpha 0.5)**. That hedges the
 disagreement directly: if alpha 0.75's public edge is real it is the better pick,
 and if it is noise then alpha 0.5 -- the value fold 2 preferred and the default
 the pre-registration protected -- is still selected. Two picks spanning the one
@@ -2051,8 +2051,8 @@ worthwhile, so nothing was written and no diagnostic file was produced.
 | E2b | forward-in-time isotonic gate calibration | 0.28754 | -0.00305 | dropped |
 
 Three for three negative, and the recipe table is unchanged. Running total:
-**four kept changes out of 60 variants across seven sweeps.** The two selected
-picks (`v4_alpha075`, `v4_hybrid`) are untouched.
+**four kept changes out of 60 variants across seven sweeps.** The two picks
+selected at that date (`v4_alpha075`, `v4_hybrid`) are untouched.
 
 ## Sweep 8, renewal (fill-rhythm) features (9 Oct) -- all dropped
 
@@ -2239,7 +2239,7 @@ in [`src/sweep2.py`](../src/sweep2.py): the four bagging helpers now take
 ### Not affected
 - **`make_submission.py`**, where `seeds` is a required positional in both
   `hurdle` and `bag_reg`. Every submission it produced used its stated seed count.
-- **Both selected picks.** `submission_v4_hybrid.csv` and
+- **Both picks selected at that date.** `submission_v4_hybrid.csv` and
   `submission_v4_alpha075.csv` are byte-identical to `make_submission.py` output
   (verified, and the recipe output was promoted to the committed artifact), so
   their CLV columns are genuine 20-seed.
@@ -2864,6 +2864,71 @@ Two caveats, both on the record rather than tidied away. These numbers come from
 a session that saved no script, so unlike every other figure in this file they
 are **not reproducible from the repo** -- they are reported, not verified. And
 the variant is recorded as *failed on one fold*, not as *measured on both*.
+
+## External screens, 12 Oct (run outside the repo, both negative, nothing added)
+
+Two screens run outside this repo. Neither produced a change, and neither has a
+committed script here, so both are recorded as **reported, not reproducible** --
+the same status as the fuel-interaction variant above. They are written down
+because a negative result nobody can find gets re-run.
+
+### a) Shop-visit rhythm for the CLV_nonfuel hurdle -- flat
+
+The renewal idea that worked for fuel, aimed at non-fuel. If fill rhythm
+predicts fuel volume, shop rhythm should predict non-fuel spend. Eleven
+features: shop-gap median, mean and CV; median of the last 6 gaps; days since
+last shop; phase (days since / typical gap); projected shop visits in the
+three-month window; projected minus previous-quarter visits; median basket
+value of the last 6 shops; shop share of all baskets; and fuel-only visits since
+the last shop. 3 seeds, base feature block, both folds.
+
+| | fold 2025-06 | fold 2025-09 |
+| --- | --- | --- |
+| rmse_nonfuel, base | 0.7357 | 0.7450 |
+| rmse_nonfuel, + shop rhythm | 0.7348 | 0.7457 |
+| delta | −0.0009 | +0.0007 |
+
+Flat, and the two folds disagree in sign -- the signature this project has
+dropped sixty-odd variants on.
+
+The sanity gate explains why, and is the part worth keeping. Only about **310
+regular shoppers per fold** have enough shop history for a gap rhythm to mean
+anything, against roughly 5,000 rows. And `P(nonfuel > 0)` does **not** separate
+by projected-minus-previous visits, so the one feature carrying the mechanism
+has no gradient against the thing the hurdle gate is predicting. That is a
+cleaner kill than the RMSE: the signal is absent, not merely small.
+
+This is the mechanism rule from sweep 9 cutting the other way. r1 transferred at
+3.8x because fill rhythm has a causal story for fuel *volume*. Shop rhythm has a
+plausible-sounding story for non-fuel spend and no measurable one, which is
+exactly what the gate tested. **Closed.**
+
+### b) Regression level drift -- a thin-training artefact, no correction
+
+Mean signed error of the hurdle, `mean(pred − actual)`, by validation cutoff,
+with the number of training snapshots that cutoff allows:
+
+| validation cutoff | training snapshots | fuel bias | non-fuel bias |
+| --- | --- | --- | --- |
+| 2024-12 | 4 | +0.101 | +0.175 |
+| 2025-03 | 7 | +0.091 | +0.095 |
+| 2025-06 | 10 | +0.018 | +0.017 |
+| 2025-09 | 13 | −0.014 | +0.007 |
+
+The bias is monotone in training size on both targets and reaches about zero by
+13 snapshots. It is a **thin-training artefact, not a standing level error**, and
+the submitted models train on all **16** snapshots -- three more than the most
+favourable row here. Correcting a bias that has already decayed to +0.007 and
+−0.014 would import more error than it removes.
+
+The gate was checked separately on 2025-09: mean `P(y > 0)` of **0.707** against
+an actual positive rate of **0.708**, a one-in-a-thousand gap. **No correction
+applied. Closed.**
+
+This agrees with what sweep 7 found by a different route -- forward-in-time
+isotonic gate calibration scored −0.00305 because the gate was already well
+calibrated out of sample. Two independent measurements, same conclusion: the
+hurdle does not want a level correction.
 
 ## Open questions
 - Does higher or lower win on the leaderboard?

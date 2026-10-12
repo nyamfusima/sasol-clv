@@ -10,13 +10,13 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | 2026-10-06 | submission_v3.csv | bag20 regressions + prior matching to the 2025-09-01 mix (4 large classes) at alpha 0.5 | 0.5996 | 0.7451 | 0.5173 | 0.3031 | score 0.28929; best candidate |
 
 | 2026-10-08 | submission_v4_simple.csv | lag classifier + simple Fuel x1.25 rule + v3 regressions | 0.5996 | 0.7451 | 0.5093 | **0.3049** | Zindi ID **8ii1ZeJp**. Public 0.304851105 = F1 0.528141734 / rmse 0.593163991 / 0.723339664. Pre-registered bands: >0.5353 would have replaced the alpha 0.5 pick, 0.515-0.5353 keeps the pair. Landed mid-band at 0.5281, so **selection unchanged** |
-| 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected**. Folds disagreed on alpha; see notes. `submission_diag_alpha075.csv` and `submission_v4_alpha075.csv` are the SAME file, kept under both names so the pre-registration history stays readable; `--recipe v4_alpha075 --skip-validation` reproduces it byte-identically |
+| 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected** at the time (pick 1 until 11 Oct; superseded by nskGdBPf). Folds disagreed on alpha; see notes. `submission_diag_alpha075.csv` and `submission_v4_alpha075.csv` are the SAME file, kept under both names so the pre-registration history stays readable; `--recipe v4_alpha075 --skip-validation` reproduces it byte-identically |
 | 2026-10-10 | submission_diag_v5_reg.csv | v4_alpha075 with the r1 renewal block added to the hurdle regressions (131 regression features, 20 seeds). Opportunity column **identical on all 5,488 rows** to submission_v4_alpha075.csv | 0.5982 | 0.7450 | 0.5139 | **0.3092** | Zindi ID **p7G9LVTM**. Public 0.309155505 = F1 0.535300706 / rmse 0.588231347 / 0.724859897. Pre-registered rule: adopt only if public RMSE improves on BOTH targets and the score gain is at least +0.0005 over A37bufRz. Fuel -0.00493 **pass**, non-fuel +0.00152 **FAIL**, score +0.00144 pass. The both-targets clause fails, so **v5_reg is NOT adopted** |
 | 2026-10-10 | submission_v5_fuel.csv | **POST-HOC.** v4_alpha075 except the CLV_fuel hurdle uses base + r1 renewal (131 features); CLV_nonfuel stays on base (97). Opportunity and CLV_nonfuel identical to submission_v4_alpha075.csv on all 5,488 rows; CLV_fuel identical to submission_diag_v5_reg.csv | 0.5982 | 0.7451 | 0.5139 | **0.3097** | Zindi ID **DapJS5NA**. Public **0.309714414**, rank **31**. validation **0.29148** (+0.00053 over v4_alpha075). Because all three columns are byte-identical to their sources, its public score is **determined, not estimated**: 0.4*0.535300706 + 0.3*(1-0.588231347/0.74) + 0.3*(1-0.723339664/0.816) = **0.309714415**, +0.002000 over A37bufRz. The per-target split was chosen **after** seeing p7G9LVTM's public result |
 | 2026-10-11 | submission_v5_fuel2.csv | sweep 9: v5_fuel with all three renewal blocks for the CLV_fuel hurdle (163 fuel features, 97 non-fuel). Opportunity and CLV_nonfuel identical to submission_v4_alpha075.csv on all 5,488 rows | 0.5979 | 0.7451 | 0.5139 | **0.30979** | Zindi ID **nskGdBPf**. Public 0.309785160 = F1 0.535300706 / rmse **0.588056839** / 0.723339664. Pre-registered test was "public CLV Fuel RMSE improves on 0.588231347": it did, by **-0.000175**, so **ADOPTED** as selected pick 1. Validation 0.29178. Caveat recorded in advance: r2 and r3 each worsen fuel RMSE standalone, so the gain is an interaction, and it transferred at 0.23x against r1's 3.8x |
 | 2026-10-11 | submission_v5_fuel2_a050.csv | the alpha 0.5 hedge brought up to date: v5_fuel2 regressions with alpha 0.5. Opportunity identical to submission_v4_hybrid.csv and both CLV columns identical to submission_v5_fuel2.csv, all on 5,488/5,488 rows | 0.5979 | 0.7451 | 0.5132 | **0.30722** | Zindi IDs **ai8DbQB7** and **gmpjvZn9** (resubmission), both **0.307223445**, identical to all nine digits. Validation **0.29151** (+0.00083 over v4_hybrid). The score was **determined before upload** -- 0.4*0.528896416 + 0.3*(1-0.588056839/0.74) + 0.3*(1-0.723339664/0.816) = 0.307223445 -- and measured at exactly that, residual **1.8e-10**. +0.002070 over rjQUYHF9. **gmpjvZn9 is SELECTED pick 2** |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, prior matching alpha 0.5. **Classifier 20 seeds; CLV columns were built at 5 seeds, not 20** -- a frozen default argument swallowed the seed override (found 9 Oct, see notes). Re-measured at matched seeds the difference is +0.00021 in score, so the row stands | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate at the time, not selected |
-| 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and is the **selected** one. validation 0.29068 |
+| 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and was the **selected** one of the two, until gmpjvZn9 replaced it as pick 2 on 12 Oct. validation 0.29068 |
 | 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude). CLV built at **5 seeds, not 20** -- same frozen-default bug | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086 at 5 seeds) |
 
 | 2026-10-06 | submission_v2_bag20.csv | 20-seed bag (42-61), monthly, hurdle regressions | 0.5996 | 0.7451 | 0.5045 | 0.2987 | score 0.28502; flip rate 1.42% vs 2.91% for 5-seed |
@@ -100,7 +100,7 @@ one parameter the evidence is split on.
 
 | file | Zindi ID | public | validation | status |
 | --- | --- | --- | --- | --- |
-| `submission_v4_alpha075.csv` | **A37bufRz** | **0.307714693** (rank 37) | 0.29095* | **selected** |
+| `submission_v4_alpha075.csv` | **A37bufRz** | **0.307714693** (rank 37) | 0.29095* | pick 1 until 11 Oct, superseded by `nskGdBPf` |
 | `submission_v4_hybrid.csv` | **rjQUYHF9** | **0.305152978** (rank 49) | 0.29068 | pick 2 until 12 Oct, superseded by `gmpjvZn9` |
 | `submission_v4_hybrid.csv` (pre-promotion) | Bb8Js9A2 | 0.305152978 | 0.29068 | superseded |
 | `submission_v4_lags.csv` | - | 0.3045 | 0.29119 | submitted |
@@ -217,7 +217,7 @@ with no cached artifacts:
 | `submission_v2.csv` | `--recipe v2` | **1 ULP, not byte-identical** -- see below | 328 s |
 | `submission_diag_v5_reg.csv` | `--recipe v5_reg` | **byte-identical** across two runs (sha256 `ac71ce631f10c6bc...`) | 4680 s full / 1689 s final-fit |
 
-So both submitted and selected files -- A37bufRz and rjQUYHF9 -- are exactly what
+So both files selected at that date -- A37bufRz and rjQUYHF9 -- are exactly what
 their documented recipes produce. `submission_v4_simple.csv` needed no promotion:
 it was built by composition from cached probabilities, and because its CLV came
 from the already-promoted v4_hybrid, both lineages are now the loop-summation
@@ -237,7 +237,7 @@ form and the recipe matches it exactly.
 **The both-targets clause fails, so v5_reg is not adopted.** Two of the three
 conditions passed and the score gain was nearly triple the required margin, and
 the rule still refuses it, which is the whole point of fixing the rule
-beforehand. The selected picks are unchanged: `A37bufRz` and `rjQUYHF9`.
+beforehand. The picks selected at that date are unchanged: `A37bufRz` and `rjQUYHF9`.
 
 The split is informative rather than disappointing. Validation said fuel
 -0.0012 / -0.0014 and non-fuel -0.0022 / -0.0001; public says fuel -0.0049 and
@@ -478,8 +478,8 @@ bit-identical to v3:
 
 | | F1 | rmse fuel | rmse nonfuel | public |
 | --- | --- | --- | --- | --- |
-| v3 (selected) | 0.5239 | 0.5932 | 0.7233 | 0.3031 |
-| v4_lags (selected) | 0.5289 | 0.5944 | 0.7236 | 0.3045 |
+| v3 (selected then) | 0.5239 | 0.5932 | 0.7233 | 0.3031 |
+| v4_lags (selected then) | 0.5289 | 0.5944 | 0.7236 | 0.3045 |
 | **v4_hybrid** (not selected) | 0.5289 | 0.5932 | 0.7233 | **0.30515** |
 
 +0.00065 over v4_lags and +0.00205 over v3. It keeps the lag classifier's
@@ -555,9 +555,34 @@ repo or the leaderboard can substitute for that.
 | Predict zero | 1.834 | 1.224 | - |
 
 ## Leaderboard reference
-- Direction (higher or lower wins):
-- 1st / 3rd / 10th:
-- Exact closing time:
+
+All scores in this section are **public-board numbers, computed on 30% of the
+test set** (about 1,650 of 5,488 customers). They are not the result. The
+final standing is the **best private (70%) score of the two selected
+submissions**, over the remaining ~3,838 customers, and nothing in this repo
+has been fitted to that split.
+
+| | |
+| --- | --- |
+| Direction | **higher is better** |
+| Read off | 12 Oct 2026, **__:__ SAST** *(time not supplied -- see below)* |
+| My rank | **__ of __** *(not yet read off the board)* |
+| 1st | **__** *(not yet read off the board)* |
+| 3rd | **__** *(not yet read off the board)* |
+| 10th | **__** *(not yet read off the board)* |
+| My best public | **0.309785160** (`nskGdBPf`, `v5_fuel2`) |
+| Close | **02:00 SAST Mon 19 Oct 2026** (last working day Sun 18 Oct) |
+
+**Five values above are placeholders, not data.** The read-off time, the rank
+and the 1st / 3rd / 10th scores arrived as blanks and are the one thing here
+that cannot be derived from the repo or from any score already recorded, so
+they were left visibly empty rather than guessed. Every other figure in this
+file is either measured or determined; these would have been invented, which
+is a different kind of entry and does not belong in the same table.
+
+For scale when they are filled in: the rank gradient measured from our own
+three readings is 0.00021 per place between 0.305 and 0.308, and 0.00035 per
+place between 0.308 and 0.310.
 
 ## Final selection
 

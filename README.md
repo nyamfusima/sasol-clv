@@ -48,7 +48,7 @@ It is a post-hoc recipe, though: the per-target split was chosen after seeing
 optimistic as a private expectation.
 
 \* `v4_alpha075`'s validation figure is the mean of two folds that **disagree
-about it**: α 0.75 is +0.0046 F1 on fold 1 and −0.0032 on fold 2. It is carried
+about it**: α 0.75 is +0.0046 F1 on fold 1 and −0.0032 on fold 2. It was carried
 as a selected pick because the public board, used as a pre-registered third
 reading, favoured it by +0.0064 F1 (0.3077 against 0.3052, rank 37 against 49)
 with the regressions byte-identical. Pooled across all three readings by sample
