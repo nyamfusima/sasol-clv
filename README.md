@@ -12,24 +12,32 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | v2 — 5-seed bagging + hurdle regressions | 0.28553 | 0.2991 | |
 | v3 — + partial prior matching | 0.28929 | 0.3031 | submitted |
 | v4_lags — + lag series on all three models | 0.29119 | 0.3045 | submitted, not selected |
-| v4_hybrid — lag classifier, v3 regressions, α 0.5 | 0.29068 | 0.3052 | **selected**, rank 49 |
-| **v4_alpha075 — same, α 0.75** | 0.29095\* | **0.3077** | **selected**, rank 37 |
+| v4_hybrid — lag classifier, v3 regressions, α 0.5 | 0.29068 | 0.3052 | pick 2 until 12 Oct, rank 49 |
+| **v4_alpha075 — same, α 0.75** | 0.29095\* | **0.3077** | pick 1 until 11 Oct, rank 37 |
 | v4_simple — lag classifier, Fuel ×1.25 rule | 0.28796 | 0.3049 | submitted, not selected |
 | v5_reg — renewal features in both hurdles | 0.29188 | 0.3092 | diagnostic, not adopted |
 | v5_fuel — renewal r1 in the fuel hurdle | 0.29148 | 0.3097 | superseded |
 | **v5_fuel2 — renewal r1+r2+r3 in the fuel hurdle** | 0.29178 | **0.3098** | **selected pick 1** |
-| **v5_fuel2_a050 — the same at α 0.5** | 0.29151 | 0.3072† | built and verified, **not yet submitted**; proposed pick 2 |
+| **v5_fuel2_a050 — the same at α 0.5** | 0.29151 | **0.3072**† | **selected pick 2** |
 
 Validation is the mean of two time-based folds; see
 [Validation protocol](#validation-protocol).
 
-† `v5_fuel2_a050`'s public figure is **determined, not measured**: all three of
-its columns are byte-identical to files whose public components are already
-published, so the formula fixes it at 0.307223445. It has **not been uploaded**,
-and a determined score cannot be selected -- the second Zindi pick is still
-`rjQUYHF9` (v4_hybrid, 0.305152978), which carries the superseded base-feature
-fuel hurdle. Submitting this file and reselecting is worth **+0.002070** on the
-hedge slot and is the one action still outstanding.
+**Final picks, locked 12 Oct 2026:** `nskGdBPf` (`v5_fuel2`, α 0.75, public
+0.309785160) and `gmpjvZn9` (`v5_fuel2_a050`, α 0.5, public 0.307223445). The
+two files are byte-identical on both CLV columns and differ only in the
+prior-matching damping exponent, which changes 286 of 5,488 labels — the one
+parameter the evidence is split on. See
+[`reports/submissions_log.md`](reports/submissions_log.md) for the reasoning.
+
+† `v5_fuel2_a050`'s public score was **determined before it was uploaded** and
+then measured at exactly that value. All three of its columns are
+byte-identical to files whose public components were already published, which
+fixed it at 0.307223445; uploaded twice, as `ai8DbQB7` and `gmpjvZn9`, it
+returned **0.307223445** both times, a residual of 1.8e-10. It replaced
+`rjQUYHF9` (v4_hybrid, 0.305152978) as the second pick on 12 Oct, worth
+**+0.002070** on the hedge slot, because `rjQUYHF9` still carried the
+superseded base-feature fuel hurdle.
 
 `v5_fuel`'s score was **computed before it was submitted**: its three columns
 are byte-identical to files whose public components were already published, so
@@ -109,12 +117,12 @@ validation score, validates the output before writing, and reports its runtime.
 
 | recipe | seeds | classifier lags | regression lags | decision rule | output |
 | --- | --- | --- | --- | --- | --- |
-| **v4_hybrid** | 42–61 | yes | no | prior matching, α 0.5 | selected |
-| **v4_alpha075** | 42–61 | yes | no | prior matching, α 0.75 | selected |
+| v4_hybrid | 42–61 | yes | no | prior matching, α 0.5 | former pick 2 |
+| v4_alpha075 | 42–61 | yes | no | prior matching, α 0.75 | former pick 1 |
 | `v5_reg` | 42–61 | yes | renewal (both targets) | prior matching, α 0.75 | diagnostic, **not adopted** |
 | `v5_fuel` | 42–61 | yes | renewal r1 (fuel only) | prior matching, α 0.75 | **best public**, rank 31 |
 | **`v5_fuel2`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | **selected** |
-| **`v5_fuel2_a050`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | proposed hedge, not yet submitted |
+| **`v5_fuel2_a050`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | **selected** (hedge) |
 | v4_lags | 42–61 | yes | yes | prior matching, α 0.5 | |
 | v4_simple | 42–61 | yes | no | Fuel ×1.25 | hedge |
 | v3 | 42–61 | no | no | prior matching, α 0.5 | |
@@ -131,8 +139,8 @@ with `cmp`:
 
 | file | recipe | runtime |
 | --- | --- | --- |
-| `submission_v4_alpha075.csv` (selected) | `--recipe v4_alpha075` | 1970 s |
-| `submission_v4_hybrid.csv` (selected) | `--recipe v4_hybrid` | 4785 s full, 1642 s final fit |
+| `submission_v4_alpha075.csv` (former pick 1) | `--recipe v4_alpha075` | 1970 s |
+| `submission_v4_hybrid.csv` (former pick 2) | `--recipe v4_hybrid` | 4785 s full, 1642 s final fit |
 | `submission_v4_simple.csv` | `--recipe v4_simple` | 1806 s |
 | `submission_v2.csv` | `--recipe v2` | 646 s |
 
