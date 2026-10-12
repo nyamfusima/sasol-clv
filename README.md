@@ -42,8 +42,9 @@ parameter the evidence is split on, rather than agreeing with each other — see
 [`reports/notes.md`](reports/notes.md) for why that is deliberate and what it
 risks.
 
-**What transferred to the public board and what did not.** Eight sweeps and 66
-variants produced four kept changes. Comparing each one's validation delta
+**What transferred to the public board and what did not.** Ten sweeps and 77
+variants produced four kept changes, plus the two fuel-regression steps adopted
+through pre-registered public tests. Comparing each one's validation delta
 with its measured public delta gives a sharper rule than "labels matter":
 
 | change | validation | public | public ΔF1 |
@@ -211,6 +212,16 @@ validation print reproduces exactly: F1 0.5095 / 0.5169, rmse_fuel 0.5969 /
    between class-mix distance and F1 is 0.10. That same rule recovers **85% of
    the whole argmax→α gain with no fitted parameter**, which bounds the
    tuning-sensitive part of the decision rule at the last 0.0020.
+   Sweep 10 then closed the one boundary left: a one-parameter gate on the
+   Fuel-growth/Stable decision, the worst cell in every confusion matrix this
+   project has produced, cannot pay even with an **oracle** choice of its
+   parameter — at most +0.0033 on one fold and +0.0025 on the mean, against a
+   +0.005 bar. About 60-65% of each fold is contested, so this is not a coverage
+   failure: the two off-diagonal cells are nearly the same size (307 against
+   344 on fold 1), so the boundary trades one error for the other at 1:1 and
+   the curve is flat at the top. That same cell asymmetry is what the two folds
+   disagree about when they disagree about α, so the hedge spans one problem,
+   not two.
 4. **CLV_fuel / CLV_nonfuel** — a hurdle model: `P(y>0)` from a classifier times
    `E[y|y>0]` from a regressor fitted on positive rows only. Each stage is
    seed-averaged and the product is clipped at 0. This is the single largest
@@ -327,6 +338,8 @@ them at all.
 | `src/train_label.py` | sweep 1: label-model variants a–f |
 | `src/sweep7.py` | sweep 7: expected-F1 decoding, hurdle/direct blend, gate calibration |
 | `src/features5.py`, `src/sweep8.py`, `src/sweep8_tracks.py` | sweep 8: renewal (fill-rhythm) features |
+| `src/sweep9.py` | sweep 9: renewal blocks for the CLV_fuel hurdle only |
+| `src/sweep10.py` | sweep 10: the Fuel/Stable decision boundary, closed by its own oracle |
 | `src/features2.py` | block F feature groups (customer id, sites, fuel type/price, timing, vouchers) |
 | `src/features4.py` | sweep 6 blocks N1–N6 (own label history, per-category history, recency, basket structure, weekly series, longer lookback) |
 | `src/stability.py` | seed-stability analysis and the 20-seed bag |

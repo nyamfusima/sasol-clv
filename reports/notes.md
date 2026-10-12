@@ -2729,6 +2729,142 @@ and it is the reason not to join them: about 86% of that gain is overfitting by
 our own measurement, against a private split of about 3,838 customers that
 nothing has been fitted to.
 
+## Sweep 10: the Fuel/Stable boundary, closed by its own oracle (12 Oct)
+
+Blocks C and E closed the "change what gets predicted" route from the feature
+side and left one sentence standing: *the race is Fuel growth vs Stable
+discrimination, which is also exactly where the confusion matrix has always been
+worst.* Everything tried there added features. Sweep 10 asks the complementary
+question, which costs nothing because it runs on the cached 20-seed validation
+probabilities with no refits: **is the Fuel/Stable boundary itself mis-placed,
+separately from the global class mix prior matching already moves?**
+
+`src/sweep10.py`, both folds, both cached 20-seed classifiers.
+
+### The reference table, which also fixes an unrecorded result
+
+| rule | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| argmax | 0.4966 | 0.5051 | 0.5009 |
+| alpha 0.5 | 0.5095 | **0.5169** | 0.5132 |
+| alpha 0.75 | **0.5141** | 0.5137 | **0.5139** |
+| alpha 1.0 | 0.5063 | 0.5088 | 0.5075 |
+
+A Fuel/Stable diagnostic run on 11 Oct produced exactly these six numbers and
+was never written down, because the session that produced it saved no script.
+`sweep10.py` reproduces all six to four decimals, so the result is now in the
+record and re-runnable in 9 seconds. **The standing rule this violated: a number
+only counts once a committed script produces it.**
+
+The baseline a gate has to beat is the stricter of two readings. Per fold, the
+better of the two shipped alphas is 0.5141 / 0.5169 -- harder than either pick
+alone, because the two selected picks already span alpha. The gate's own alpha
+baseline is the more generous reading, and the verdict is the same under both.
+
+### Two gates, one parameter each, applied after the alpha weights
+
+- **g1 targeted.** Rows whose decision is already Fuel or Stable are re-decided
+  between those two alone, with Fuel's score multiplied by `m`. No other class
+  can lose a row. This is the version block C and E never tested.
+- **g2 global.** Fuel's score multiplied by `m` on every row, then argmax --
+  v4_simple's Fuel x1.25 family stacked on IPF, included only to isolate what
+  "targeted" buys over "global".
+
+Pre-registered before any result: **oracle first.** Per fold, take the best `m`
+on the grid with full sight of that fold's labels. If the mean oracle gain is
+under +0.005 weighted F1 the direction is closed whatever the cross-fold numbers
+say -- the test that closed block C. Then both folds' independent searches must
+choose the same `m`, as alpha's did, and the cross-fold reading (`m` chosen on
+one fold, scored on the other) must clear +0.005 on both held-out folds.
+
+### Every ceiling is a fifth of the bar
+
+Measured against each gate's **own** alpha baseline, the most generous framing:
+
+| model | gate | oracle (ceiling) | cross-fold (honest) |
+| --- | --- | --- | --- |
+| lags20 | g1 targeted, alpha 0.5 | +0.0007 / +0.0022 | −0.0013 / −0.0010 |
+| lags20 | g1 targeted, alpha 0.75 | +0.0001 / +0.0011 | −0.0034 / +0.0003 |
+| lags20 | g2 global, alpha 0.5 | +0.0011 / +0.0014 | **+0.0011 / +0.0014** |
+| lags20 | g2 global, alpha 0.75 | +0.0000 / +0.0033 | −0.0041 / +0.0000 |
+| r320 | g1 targeted, alpha 0.5 | +0.0023 / +0.0020 | −0.0034 / −0.0012 |
+| r320 | g1 targeted, alpha 0.75 | +0.0031 / +0.0018 | −0.0016 / −0.0003 |
+| r320 | g2 global, alpha 0.5 | +0.0017 / +0.0016 | −0.0045 / −0.0027 |
+| r320 | g2 global, alpha 0.75 | +0.0002 / +0.0017 | −0.0092 / +0.0001 |
+
+Against its own alpha baseline the largest single-fold oracle anywhere is
+**+0.0033** and the largest mean is **+0.0025**, against a +0.005 bar. Against
+the stricter shipped-pair baseline every mean oracle lands between −0.0010 and
++0.0017. Seven of the eight cross-fold readings are negative on at least one
+fold. **Nothing here is adoptable, and
+nothing better in this family exists to find, because the oracle already cannot
+pay.**
+
+### Why: the off-diagonal is large but nearly symmetric
+
+The Fuel/Stable confusion at the baseline, with the contested-row count -- rows
+whose decision is already Fuel or Stable, the only rows g1 can move:
+
+| fold | n | contested | Fuel→Stable | Stable→Fuel | own best m |
+| --- | --- | --- | --- | --- | --- |
+| 2025-06, alpha 0.5 | 4961 | 3243 | 340 | 327 | 1.039 |
+| 2025-09, alpha 0.5 | 5238 | 3188 | 387 | 283 | 1.139 |
+| 2025-06, alpha 0.75 | 4961 | 3175 | 307 | 344 | 0.993 |
+| 2025-09, alpha 0.75 | 5238 | 3100 | 354 | 291 | 1.088 |
+
+About 60-65% of every fold is contested, so the gate has plenty of rows to work
+with -- this is not a coverage failure. The reason it cannot pay is that **the
+two off-diagonal cells are nearly the same size**, so moving the boundary trades
+one error for the other at close to 1:1 and the F1 curve is flat at the top.
+A threshold only earns anything when the off-diagonal is lopsided.
+
+That also explains the fold disagreement mechanically, which is new. The folds
+disagree on `m` in exactly the proportion their cells are lopsided: 2025-06 at
+alpha 0.5 is balanced (340 against 327) and picks m = 1.04, while 2025-09 is
+lopsided toward Fuel→Stable (387 against 283) and picks m = 1.14. At alpha 0.75
+the 2025-06 cells invert (307 against 344) and its best `m` drops below 1. **The
+alpha disagreement the two selected picks hedge is the same asymmetry seen
+through the global mix** -- not two separate problems.
+
+### The one agreement does not replicate across probability models
+
+`g2 global` on alpha 0.5 is the single variant where both folds chose the same
+`m` (1.139) and both improved on their own baseline, +0.0011 / +0.0014. That is
+the shape the project has learned to respect: a single global constant both
+folds agree on is the change (Fuel x1.25) that nearly tripled on the public
+board. So it was checked on the second classifier before being believed.
+
+| model | fold best m | F1 at m = 1.139 | over own baseline |
+| --- | --- | --- | --- |
+| lags20 | 1.139 / 1.139 | 0.5106 / 0.5183 | +0.0011 / +0.0014 |
+| r320 | 0.948 / 1.192 | 0.5106 / 0.5170 | +0.0001 / +0.0008 |
+
+On r320 the two folds land on **opposite sides of 1**. The agreement is a
+property of one probability model, not of the boundary, which is the same way
+the 3-parameter prior adjustment failed: only the Fuel-growth weight replicated
+and Stable came out on opposite sides. +0.0011 / +0.0014 is also inside the
+alpha plateau it sits on -- alpha 0.75 already scores 0.5139 mean against this
+variant's 0.5145.
+
+**Verdict: the Fuel/Stable boundary is closed, by the same oracle test that
+closed the adoption classes.** The route is not under-tuned; the two classes
+genuinely overlap in these features, which is what blocks C and E found from the
+feature side and what this finds from the decision side.
+
+### The fuel-interaction feature variant, recorded as incomplete
+
+The other half of the same 11 Oct plan added three fuel interaction features to
+the classifier and was run on the June fold only: **−0.0001 weighted F1 at alpha
+0.50 and −0.0024 at alpha 0.75**, against a +0.005 keep bar. The September refit
+was not run and will not be: the bar requires both folds, so a June failure
+makes it unreachable and the refit would cost hours to confirm a variant that is
+already disqualified.
+
+Two caveats, both on the record rather than tidied away. These numbers come from
+a session that saved no script, so unlike every other figure in this file they
+are **not reproducible from the repo** -- they are reported, not verified. And
+the variant is recorded as *failed on one fold*, not as *measured on both*.
+
 ## Open questions
 - Does higher or lower win on the leaderboard?
 - Does public score track validation?
