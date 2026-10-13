@@ -19,11 +19,14 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | v5_fuel — renewal r1 in the fuel hurdle | 0.29148 | 0.3097 | superseded |
 | **v5_fuel2 — renewal r1+r2+r3 in the fuel hurdle** | 0.29178 | **0.3098** | **selected pick 1** |
 | **v5_fuel2_a050 — the same at α 0.5** | 0.29151 | **0.3072**† | **selected pick 2** |
+| v6_reg — + sweep 11 regularisation | **0.29382** | — | built 13 Oct, **pending upload** |
+| v6_reg_a050 — the same at α 0.5 | 0.29340 | — | built 13 Oct, **pending upload** |
+| diag_v6_clf — the classifier half only | 0.29270 | — | diagnostic, for the paired public reading |
 
 Validation is the mean of two time-based folds; see
 [Validation protocol](#validation-protocol).
 
-**Final picks, locked 12 Oct 2026:** `nskGdBPf` (`v5_fuel2`, α 0.75, public
+**Final picks, locked 12 Oct 2026 and reopened 13 Oct** (see [sweep 11](#results) rows above and `reports/notes.md`; the locked pair stands until the pre-registered public rule is evaluated)**:** `nskGdBPf` (`v5_fuel2`, α 0.75, public
 0.309785160) and `gmpjvZn9` (`v5_fuel2_a050`, α 0.5, public 0.307223445). The
 two files are byte-identical on both CLV columns and differ only in the
 prior-matching damping exponent, which changes 286 of 5,488 labels — the one
@@ -110,7 +113,7 @@ pip install -r requirements-lock.txt
 python src/make_submission.py --recipe v4_hybrid
 ```
 
-One entry point, five recipes, each going from `data/train.csv` and
+One entry point, fourteen recipes, each going from `data/train.csv` and
 `data/test.csv` to a submission with **no cached artifacts** — all 17 snapshots
 and their features are built in memory. Each prints its per-fold and mean
 validation score, validates the output before writing, and reports its runtime.
@@ -123,6 +126,10 @@ validation score, validates the output before writing, and reports its runtime.
 | `v5_fuel` | 42–61 | yes | renewal r1 (fuel only) | prior matching, α 0.75 | **best public**, rank 31 |
 | **`v5_fuel2`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | **selected** |
 | **`v5_fuel2_a050`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | **selected** (hedge) |
+| `v6_reg` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | sweep 11 regularisation, **candidate** |
+| `v6_reg_a050` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | the same, **candidate** (hedge) |
+| `v6_clf` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | regularised classifier only, **diagnostic** |
+| `v6_clf_a050` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | conditional: only if the public rule needs it |
 | v4_lags | 42–61 | yes | yes | prior matching, α 0.5 | |
 | v4_simple | 42–61 | yes | no | Fuel ×1.25 | hedge |
 | v3 | 42–61 | no | no | prior matching, α 0.5 | |
@@ -350,12 +357,14 @@ them at all.
 | --- | --- |
 | `src/baseline.py` | the original single-seed reference; still pins RMSE fuel 0.6052 / non-fuel 0.7489 / F1 0.5047 |
 | `src/validate.py` | fold definitions, per-class F1, confusion matrices, the scoring helper |
+| `src/check_submission.py` | reads a written submission back off disk: format, sha256, label churn and per-column byte-identity against a reference |
 | `src/sweep2.py` | sweeps A–G: training recipe, regressions, adoption, cutoff density, rule events, new features, seasonal analogs |
 | `src/train_label.py` | sweep 1: label-model variants a–f |
 | `src/sweep7.py` | sweep 7: expected-F1 decoding, hurdle/direct blend, gate calibration |
 | `src/features5.py`, `src/sweep8.py`, `src/sweep8_tracks.py` | sweep 8: renewal (fill-rhythm) features |
 | `src/sweep9.py` | sweep 9: renewal blocks for the CLV_fuel hurdle only |
 | `src/sweep10.py` | sweep 10: the Fuel/Stable decision boundary, closed by its own oracle |
+| `src/sweep11.py` | sweep 11: LightGBM regularisation, the one thing never tuned since day one |
 | `src/features2.py` | block F feature groups (customer id, sites, fuel type/price, timing, vouchers) |
 | `src/features4.py` | sweep 6 blocks N1–N6 (own label history, per-category history, recency, basket structure, weekly series, longer lookback) |
 | `src/stability.py` | seed-stability analysis and the 20-seed bag |

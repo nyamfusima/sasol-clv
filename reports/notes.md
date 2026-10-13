@@ -2865,12 +2865,12 @@ a session that saved no script, so unlike every other figure in this file they
 are **not reproducible from the repo** -- they are reported, not verified. And
 the variant is recorded as *failed on one fold*, not as *measured on both*.
 
-## External screens, 12 Oct (run outside the repo, both negative, nothing added)
+## External screens, 12 Oct (run outside the repo, all negative, nothing added)
 
-Two screens run outside this repo. Neither produced a change, and neither has a
-committed script here, so both are recorded as **reported, not reproducible** --
-the same status as the fuel-interaction variant above. They are written down
-because a negative result nobody can find gets re-run.
+Three screens run outside this repo. None produced a change, and none has a
+committed script here, so all three are recorded as **reported, not
+reproducible** -- the same status as the fuel-interaction variant above. They
+are written down because a negative result nobody can find gets re-run.
 
 ### a) Shop-visit rhythm for the CLV_nonfuel hurdle -- flat
 
@@ -2929,6 +2929,270 @@ This agrees with what sweep 7 found by a different route -- forward-in-time
 isotonic gate calibration scored −0.00305 because the gate was already well
 calibrated out of sample. Two independent measurements, same conclusion: the
 hurdle does not want a level correction.
+
+### c) Dec-Feb seasonality in the class mix -- no seasonal term
+
+The test window is Dec 2025 - Feb 2026, and the only December cutoff in the
+training range is 2024-12-01, so the question is whether a December snapshot
+behaves differently from where the trend says it should be. If it did, the
+prior-matching target mix -- which is read off the last fully observed snapshot
+-- would be reading the wrong month.
+
+Detrending the class mix across the 16 snapshots and reading off 2024-12-01
+leaves residuals **within +/-0.012** for all three large classes: Stable,
+Inactivity and Fuel growth. There is no December effect to model.
+
+That is the right size to call negative rather than small. The project already
+measured the drift these classes carry over a year -- Inactivity +0.176/year,
+Stable −0.104/year -- so +/-0.012 is about **four to six weeks** of ordinary
+trend, not a season. Block G reached the same place from the other direction:
+weighting the 2024-12 analog snapshot x10 scored 0.4959 and training on the
+December months alone 0.4580, both far below the reference. Nothing here wants
+a seasonal term. **Closed.**
+
+## Sweep 11: the hyperparameters nobody had touched since day one (12 Oct)
+
+The locked picks were locked on the claim that *sweep 10 closed the last cheap
+lever*. That claim was about features, labels and decision rules -- the three
+things ten sweeps and 77 variants had moved. It was not about the LightGBM
+settings, which were **set by hand on day one and never revisited once**. Nine
+sweeps moved everything else around them.
+
+A screen run outside this repo (base features, seed 42, same tree counts) found
+the signature of a model given too much capacity: validation **multi-logloss
+gets worse from 200 to 400 trees on both folds**. More trees, worse held-out
+likelihood. A regularised configuration recovered it. That is a lead and not a
+result -- one seed, base features, outside this harness -- and the project's
+standing rule is that a number only counts once a committed script produces it.
+`src/sweep11.py` measures it inside the harness, at the incumbent pipeline, on
+both folds.
+
+### Pre-registered, and only one configuration tried
+
+Written before any in-harness result was seen:
+
+    arm A      the incumbent v5_fuel2 pipeline, read from the shipping code
+    arm B      clf  num_leaves 7,  min_child_samples 100, reg_lambda 5
+               gate num_leaves 7,  min_child_samples 100, reg_lambda 5
+               mag  num_leaves 15, min_child_samples 100, reg_lambda 5
+    arm B_clf  the classifier changed only
+    arm B_reg  the two hurdles changed only
+
+**No grid search.** The configuration is fixed in advance and is the only one
+tried, so this sweep either confirms the external lead at these exact settings
+or closes it. Tree counts and learning rates do not move; alpha and the Fuel
+x1.25 factor are not retuned. Keep rule, the project standard: **mean score
+gain >= +0.0015 AND better on both folds**, screened at 5 seeds and confirmed
+at 20.
+
+Four arms cost only **two classifier fits and two regression fits per fold**,
+because the two halves are independent: A = clfA+regA, B_clf = clfB+regA,
+B_reg = clfA+regB, B = clfB+regB. Each distinct fit is computed once.
+
+### The attribution is arithmetic here, not a measurement
+
+Worth being exact about, because every previous sweep had to *measure*
+attribution. The leaderboard score is linear in F1 and the two RMSEs; the
+classifier moves only F1 and the hurdles move only RMSE. So the two halves add
+by construction, and the screen confirms it to float precision -- the residual
+`B - (B_clf + B_reg)` is **5.6e-17** on every fold at both alphas.
+
+That has two consequences. On validation, `B_clf` and `B_reg` are decompositions
+rather than experiments, and the keep rule should be read off `B`. On the public
+board the split is **not** free, because public F1 and public RMSE are two
+separately unknown quantities -- which is the only reason the `v6_clf`
+diagnostic recipe exists.
+
+### Screen, 5 seeds, both folds
+
+Score per fold and mean, alpha 0.75 (pick 1's rule):
+
+| arm | 2025-06 | 2025-09 | mean | vs A |
+| --- | --- | --- | --- | --- |
+| A (incumbent) | 0.29322 | 0.28848 | 0.29085 | - |
+| B_clf | 0.29448 | 0.29073 | 0.29260 | **+0.00175** PASS |
+| B_reg | 0.29492 | 0.28906 | 0.29199 | +0.00114 fail |
+| **B (both)** | **0.29618** | **0.29130** | **0.29374** | **+0.00289 PASS** |
+
+And at alpha 0.5 (pick 2's rule):
+
+| arm | 2025-06 | 2025-09 | mean | vs A |
+| --- | --- | --- | --- | --- |
+| A (incumbent) | 0.29153 | 0.29013 | 0.29083 | - |
+| B_clf | 0.29354 | 0.28974 | 0.29164 | +0.00081 fail |
+| B_reg | 0.29323 | 0.29071 | 0.29197 | +0.00114 fail |
+| **B (both)** | **0.29525** | **0.29032** | **0.29278** | **+0.00195 PASS** |
+
+`B_reg`'s delta is **identical at both alphas** (+0.001139 to six decimals),
+which is the same structural fact: alpha moves labels, the hurdles do not see
+it. Neither half clears the bar alone at both alphas; the full change clears it
+at both.
+
+### The external lead replicates in-harness, on every component
+
+| component | A, 2025-06 | B, 2025-06 | A, 2025-09 | B, 2025-09 |
+| --- | --- | --- | --- | --- |
+| multi-logloss | 1.3157 | **1.2875** | 1.2895 | **1.2715** |
+| RMSE fuel | 0.59487 | **0.59315** | 0.59787 | **0.59747** |
+| RMSE non-fuel | 0.73515 | **0.73242** | 0.74500 | **0.74388** |
+
+Logloss falls by **0.028 and 0.018**, and all four RMSEs fall. Every component
+of the metric moves the right way on both folds -- the first time in this
+project that has happened for a single change. The overfitting the external
+screen found is real and it is in the shipping pipeline.
+
+### The one place the incumbent wins
+
+At alpha 0.5 on fold 2025-09, the regularised classifier is **worse** on F1:
+0.51505 against the incumbent's 0.51602, which is why `B_clf` fails at that
+alpha. That is not noise to wave away -- it is the same fold disagreement alpha
+has carried all project. The under-regularised classifier produces sharper
+probabilities, and sharper probabilities pair differently with a damping
+exponent that is itself a sharpness correction. **The two changes are not
+independent of each other**, even though each is independent of the other half
+of the metric. It is also the reason alpha was pre-registered as not-retuned:
+retuning it on top of this would be fitting two correlated knobs to two folds.
+
+### Pre-registered decision rules
+
+Written **before the 20-seed confirmation finished and before any v6 file was
+uploaded**, so the record shows the rule was fixed in advance rather than fitted
+to the result.
+
+**On the confirmation itself.** Arm B is judged at **alpha 0.75**, pick 1's
+rule. `v6_reg_a050` is built only if B's mean gain over A at alpha 0.5 is
+**>= 0**. If B fails at alpha 0.75, `B_clf` is the fallback candidate. If
+nothing passes at alpha 0.75, the lead is **closed** and the locked picks stand.
+
+**On the public board.** Two readings are needed, `v6_reg` and the
+`diag_v6_clf` diagnostic, and they answer different questions.
+
+**Amended 13 Oct 2026, 13:18 SAST.** The rule below replaces the two-part form
+first written here this morning. It was amended **before any v6 file was
+uploaded and while no v6 public score existed anywhere** -- the three files were
+still being built when it was written. The superseded form gated on `v6_reg`
+alone, which broke in both directions: it could promote `diag_v6_clf` without
+ever testing it (so a pair worse than the incumbent could be selected), and it
+could discard a classifier gain the public board had confirmed, by failing
+`v6_reg` on a bad regression half while `diag_v6_clf` beat `v5_fuel2`. **The
+fix is to gate whichever file the branch actually selects.**
+
+Two public readings are needed, `v6_reg` and `diag_v6_clf`, and between them
+they decompose the change exactly:
+
+    Regression half = v6_reg public - diag_v6_clf public
+                      (identical labels: the F1 term cancels, pure RMSE change)
+    Classifier half = diag_v6_clf public - 0.309785160
+                      (CLV identical to v5_fuel2: pure F1 change)
+
+- **Regression half >= -0.0010**: candidate pair is `v6_reg` + `v6_reg_a050`;
+  **adopt it if `v6_reg` public >= 0.3078**.
+- **Regression half < -0.0010**: the regression change did not transfer.
+  Candidate pair is `diag_v6_clf`, promoted from diagnostic, plus
+  `v6_clf_a050`; **adopt it if `diag_v6_clf` public >= 0.3078**.
+- **Otherwise the picks stay `nskGdBPf` + `gmpjvZn9`.**
+
+The 0.3078 gate is unchanged in value and meaning -- no more than 0.002 below
+`v5_fuel2`'s measured 0.309785160 -- but it now attaches to the file being
+selected rather than always to `v6_reg`.
+
+Both halves are **exactly recoverable**, not estimated, which is the whole
+reason the diagnostic upload is worth a slot. `diag_v6_clf` carries
+`v5_fuel2`'s already-published RMSE components (fuel 0.588056839, non-fuel
+0.723339664), so its score yields the new public F1 outright:
+
+    F1_v6 = (diag_v6_clf public - 0.3*(1 - 0.588056839/0.74)
+                                - 0.3*(1 - 0.723339664/0.816)) / 0.4
+
+and `v6_reg`'s RMSE half then follows by subtraction, since it carries the same
+labels. Two uploads give a full decomposition of public F1 and public RMSE, not
+merely a difference.
+
+Validation expects the regression half to land near **+0.0011 to +0.0014** --
+the 5-seed screen put it at +0.00114 mean and the 20-seed confirmation at
++0.00113. The bar at −0.0010 therefore tolerates a shortfall of about 0.0024
+against validation before the regression change is judged not to have
+transferred. That width is deliberate and it is the project's own history: of
+five changes with measured public deltas, **every regression refinement under
+0.001 of validation gain either vanished or reversed**, while structural changes
+held. A regularisation change is structural, but it reaches the metric through
+the same two RMSE terms that have never transferred, so the tolerance is set
+where the evidence says the risk actually is.
+
+**Determinism.** The 20-seed confirmation was interrupted after fold 2025-06 and
+re-run from scratch; the re-run reproduced all four of that fold's figures
+exactly -- clf A logloss 1.3140, reg A 0.5945 / 0.7350, clf B logloss 1.2871,
+reg B 0.5933 / 0.7324. Fixed seeds therefore pin these fits bit-for-bit, so each
+submission file is **built once** rather than twice-and-hashed, which is how the
+earlier hedge determinism check was done.
+
+### Confirmation, 20 seeds (42-61), both folds
+
+`python src/sweep11.py --block reg --confirm`, 4454 s. Alpha 0.75, pick 1's
+rule:
+
+| arm | F1 06 | F1 09 | rmseF 06 | rmseF 09 | rmseN 06 | rmseN 09 | score 06 | score 09 | mean | vs A |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A (incumbent) | 0.5141 | 0.5137 | 0.5945 | 0.5979 | 0.7350 | 0.7451 | 0.29442 | 0.28917 | 0.29179 | - |
+| B_clf | 0.5166 | 0.5157 | 0.5945 | 0.5979 | 0.7350 | 0.7451 | 0.29542 | 0.28997 | 0.29270 | +0.00090 fail |
+| B_reg | 0.5141 | 0.5137 | 0.5933 | 0.5972 | 0.7324 | 0.7436 | 0.29583 | 0.29001 | 0.29292 | +0.00113 fail |
+| **B (both)** | **0.5166** | **0.5157** | **0.5933** | **0.5972** | **0.7324** | **0.7436** | **0.29684** | **0.29081** | **0.29382** | **+0.00203 PASS** |
+
+Alpha 0.5, pick 2's rule:
+
+| arm | F1 06 | F1 09 | score 06 | score 09 | mean | vs A |
+| --- | --- | --- | --- | --- | --- | --- |
+| A (incumbent) | 0.5095 | 0.5169 | 0.29260 | 0.29043 | 0.29151 | - |
+| B_clf | 0.5144 | 0.5158 | 0.29453 | 0.29001 | 0.29227 | +0.00076 fail |
+| B_reg | 0.5095 | 0.5169 | 0.29401 | 0.29127 | 0.29264 | +0.00113 fail |
+| **B (both)** | **0.5144** | **0.5158** | **0.29595** | **0.29085** | **0.29340** | **+0.00188 PASS** |
+
+**Verdict: B passes at alpha 0.75 (+0.00203, both folds up) and clears zero at
+alpha 0.5 (+0.00188), so `v6_reg` and `v6_reg_a050` are both built.** Logloss
+falls 1.3140 to 1.2871 and 1.2874 to 1.2712; all four RMSEs fall. Neither half
+clears +0.0015 alone at either alpha -- the change is adoptable only whole.
+
+**Arm A reproduces the shipping pipeline exactly**, which is the cross-check
+that let the `make_submission` validation pass be skipped for the v6 builds:
+F1 0.5141 / 0.5137 against the logged mean 0.5139, fuel 0.5945 / 0.5979 and
+non-fuel 0.7350 / 0.7451 exactly as sweep 9 recorded them, mean score 0.29179
+at alpha 0.75 and **0.29151** at alpha 0.5 against the logged 0.29178 and
+0.29151. The harness is measuring the shipping pipeline, not a near-copy of it.
+
+### What four times the seeds did to each half
+
+| half | 5 seeds | 20 seeds | change |
+| --- | --- | --- | --- |
+| B_clf @ alpha 0.75 | +0.00175 **PASS** | +0.00090 fail | **halved** |
+| B_reg @ alpha 0.75 | +0.00114 | +0.00113 | unmoved |
+| B (both) @ alpha 0.75 | +0.00289 | +0.00203 | −0.00086 |
+
+The classifier half lost half its value going from 5 seeds to 20; the
+regression half did not move at all, to five decimals. That is the expected
+signature and it is worth stating plainly: **bagging and regularisation buy
+overlapping things in the classifier.** A 20-seed bag already averages away
+part of the variance that `num_leaves 7` and `min_child_samples 100` remove by
+construction, so at 20 seeds the regularisation is paid less for the same work.
+The hurdles' gain is not a variance effect -- it survives the bag untouched.
+
+This also means the screen's reading of `B_clf` as a passing standalone change
+was a 5-seed artefact. Had it been adopted on the screen it would have been
+adopted on a number that does not exist at shipping seed count. The project's
+two-stage screen-then-confirm rule caught exactly what it is for.
+
+The additivity identity holds again at 20 seeds: +0.00090 + 0.00113 = +0.00203
+at alpha 0.75, and +0.00076 + 0.00113 = +0.00188 at alpha 0.5, both to the last
+digit printed.
+
+### The alpha 0.5 fold disagreement reproduces
+
+At alpha 0.5 on fold 2025-09 the regularised classifier is **worse** on F1 at
+20 seeds too: 0.5158 against 0.5169, a delta of −0.00042 in score against
+−0.00039 at 5 seeds. Four times the seeds moved it by 3e-5. **It is a property
+of the fold, not sampling noise** -- which is why alpha was pre-registered as
+not-retuned, and why the alpha 0.5 file is still built as a hedge rather than
+dropped: the one fold that dislikes the regularised classifier is the one that
+likes alpha 0.5.
 
 ## Open questions
 - Does higher or lower win on the leaderboard?

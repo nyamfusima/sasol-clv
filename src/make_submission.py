@@ -10,6 +10,10 @@
     python src/make_submission.py --recipe v5_fuel      # post-hoc, fuel only
     python src/make_submission.py --recipe v5_fuel2     # sweep 9: r1+r2+r3 for fuel
     python src/make_submission.py --recipe v5_fuel2_a050 # the same, alpha 0.5 hedge
+    python src/make_submission.py --recipe v6_reg       # sweep 11: regularised
+    python src/make_submission.py --recipe v6_reg_a050  # the same, alpha 0.5
+    python src/make_submission.py --recipe v6_clf       # diagnostic: clf half only
+    python src/make_submission.py --recipe v6_clf_a050  # the same, alpha 0.5
 
 Each recipe builds every snapshot in memory, prints the per-fold and mean
 validation score, validates the output, and reports its runtime. Needs only
@@ -54,12 +58,38 @@ CLF = dict(n_estimators=400, learning_rate=0.03, num_leaves=15, min_child_sample
            subsample=0.8, subsample_freq=1, colsample_bytree=0.7)
 REG = dict(n_estimators=500, learning_rate=0.03, num_leaves=31, min_child_samples=30,
            subsample=0.8, subsample_freq=1, colsample_bytree=0.7)
+# The three LightGBM slots. `gate` starts as a copy of CLF because the hurdle
+# gate and the 17-class model shared one dict until sweep 11 needed them apart;
+# a recipe overrides any slot through its `params` field. Defaults here build
+# exactly the kwargs the pre-sweep-11 code passed, so recipes stay byte-exact.
+PARAMS = dict(clf=CLF, gate=CLF, mag=REG)
+
+
+def params_for(rec=None):
+    """Merge a recipe's `params` overrides onto the defaults, per slot."""
+    out = {k: dict(v) for k, v in PARAMS.items()}
+    for slot, over in ((rec or {}).get('params') or {}).items():
+        if slot not in out:
+            raise ValueError(f'unknown param slot {slot!r}')
+        out[slot] = {**out[slot], **over}
+    return out
 # leaderboard: Score = 0.4*F1 + 0.3*(1 - RMSE_fuel/0.74) + 0.3*(1 - RMSE_nonfuel/0.816)
 # The 0.3/0.3/0.4 weights are official; the normalisers are inferred (see README).
 FUEL_NORM, NONFUEL_NORM = 0.74, 0.816
 FUEL_LABEL = 'Existing-category growth: Fuel'
 BIG4 = ['Stable', 'Inactivity', FUEL_LABEL, 'Existing-category growth: Other']
 FUEL_GRID = tuple(np.round(np.arange(1.0, 1.501, 0.125), 3))
+
+# Sweep 11 regularisation, fixed in advance and the only configuration tried.
+# Confirmed at 20 seeds on both folds: +0.00203 mean at alpha 0.75 (+0.00242 /
+# +0.00164), +0.00188 at alpha 0.5. Adoptable only whole -- neither the
+# classifier half (+0.00090) nor the hurdle half (+0.00113) clears the +0.0015
+# bar alone. The gate and the 17-class model take the same settings; the
+# magnitude stage keeps more capacity because it fits positive rows only.
+V6_CLF = dict(num_leaves=7, min_child_samples=100, reg_lambda=5)
+V6_GATE = dict(num_leaves=7, min_child_samples=100, reg_lambda=5)
+V6_MAG = dict(num_leaves=15, min_child_samples=100, reg_lambda=5)
+V6_PARAMS = dict(clf=V6_CLF, gate=V6_GATE, mag=V6_MAG)
 
 RECIPES = {
     # name:        seeds        clf lags  reg lags  rule
@@ -113,9 +143,40 @@ RECIPES = {
     'v5_fuel2_a050': dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
                           reg_renew_targets=('CLV_fuel',),
                           renew_blocks=('r1', 'r2', 'r3'), rule='prior', alpha=0.5),
+    # Sweep 11. The LightGBM settings were fixed by hand on day one and never
+    # revisited; nine sweeps moved features, labels and rules around them. The
+    # 17-class model was overfitting outright -- validation multi-logloss got
+    # WORSE from 200 to 400 trees on both folds -- and regularising it fixes
+    # that. Everything else is v5_fuel2: same features, same seeds, same rule,
+    # same alpha. Only num_leaves, min_child_samples and reg_lambda move.
+    #
+    # The gain splits exactly into a classifier half and a regression half:
+    # the score is linear in F1 and the two RMSEs, the classifier moves only
+    # F1 and the hurdles move only RMSE, so on validation the split is
+    # arithmetic, not a measurement. It has to be measured on the public
+    # board, where the F1 and RMSE deltas are separately unknown -- which is
+    # what v6_clf is for: v6_clf - v5_fuel2 isolates the classifier half and
+    # v6_reg - v6_clf the regression half. v6_clf is never a candidate pick.
+    'v6_reg':     dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
+                       reg_renew_targets=('CLV_fuel',), renew_blocks=('r1', 'r2', 'r3'),
+                       rule='prior', alpha=0.75, params=V6_PARAMS),
+    'v6_reg_a050': dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
+                        reg_renew_targets=('CLV_fuel',), renew_blocks=('r1', 'r2', 'r3'),
+                        rule='prior', alpha=0.5, params=V6_PARAMS),
+    # Diagnostic only: the classifier half alone, so its CLV columns stay
+    # byte-identical to submission_v5_fuel2.csv and its labels equal v6_reg's.
+    'v6_clf':     dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
+                       reg_renew_targets=('CLV_fuel',), renew_blocks=('r1', 'r2', 'r3'),
+                       rule='prior', alpha=0.75, params={'clf': V6_CLF}),
+    # Built only if the pre-registered public rule reaches its second branch
+    # (see reports/notes.md): the alpha 0.5 partner for a promoted v6_clf.
+    'v6_clf_a050': dict(seeds=range(42, 62), clf_lags=True, reg_lags=False,
+                        reg_renew_targets=('CLV_fuel',), renew_blocks=('r1', 'r2', 'r3'),
+                        rule='prior', alpha=0.5, params={'clf': V6_CLF}),
 }
 DEFAULT_OUT = {k: f'submissions/submission_{k}.csv' for k in RECIPES}
 DEFAULT_OUT['v5_reg'] = 'submissions/submission_diag_v5_reg.csv'
+DEFAULT_OUT['v6_clf'] = 'submissions/submission_diag_v6_clf.csv'
 
 
 def monthly(first=FIRST_CUTOFF, last=LAST_CUTOFF):
@@ -141,37 +202,42 @@ def wide(proba, classes, labels, index):
     return out
 
 
-def bag_clf(Xtr, ycode, Xva, labels, seeds):
+def bag_clf(Xtr, ycode, Xva, labels, seeds, params=None):
     p = np.zeros((len(Xva), len(labels)))
     for s in seeds:
-        m = lgb.LGBMClassifier(random_state=s, verbose=-1, **CLF).fit(Xtr, ycode)
+        m = lgb.LGBMClassifier(random_state=s, verbose=-1,
+                               **(params or CLF)).fit(Xtr, ycode)
         p += wide(m.predict_proba(Xva), list(m.classes_), labels, Xva.index).to_numpy()
     return pd.DataFrame(p / len(seeds), index=Xva.index, columns=list(labels))
 
 
-def bag_reg(Xtr, y, Xva, seeds, w=None):
+def bag_reg(Xtr, y, Xva, seeds, w=None, params=None):
     out = np.zeros(len(Xva))
     for s in seeds:
-        out += lgb.LGBMRegressor(random_state=s, verbose=-1, **REG).fit(
+        out += lgb.LGBMRegressor(random_state=s, verbose=-1,
+                                 **(params or REG)).fit(
             Xtr, y, sample_weight=w).predict(Xva)
     return np.clip(out / len(seeds), 0, None)
 
 
-def bag_binary(Xtr, yb, Xva, seeds, w=None):
+def bag_binary(Xtr, yb, Xva, seeds, w=None, params=None):
     out = np.zeros(len(Xva))
     for s in seeds:
-        m = lgb.LGBMClassifier(random_state=s, verbose=-1, **CLF).fit(Xtr, yb, sample_weight=w)
+        m = lgb.LGBMClassifier(random_state=s, verbose=-1,
+                               **(params or CLF)).fit(Xtr, yb, sample_weight=w)
         out += m.predict_proba(Xva)[:, list(m.classes_).index(1)]
     return out / len(seeds)
 
 
-def hurdle(Xtr, y, Xva, seeds, w=None):
+def hurdle(Xtr, y, Xva, seeds, w=None, params=None):
     """P(y>0) * E[y|y>0]; the second stage sees positive rows only."""
+    pr = params or PARAMS
     pos = (y.to_numpy() > 0)
     if pos.all() or not pos.any():
-        return bag_reg(Xtr, y, Xva, seeds, w)
-    p = bag_binary(Xtr, pos.astype(int), Xva, seeds, w)
-    mag = bag_reg(Xtr[pos], y[pos], Xva, seeds, None if w is None else w[pos])
+        return bag_reg(Xtr, y, Xva, seeds, w, pr['mag'])
+    p = bag_binary(Xtr, pos.astype(int), Xva, seeds, w, pr['gate'])
+    mag = bag_reg(Xtr[pos], y[pos], Xva, seeds, None if w is None else w[pos],
+                  pr['mag'])
     return np.clip(p * mag, 0, None)
 
 
@@ -306,7 +372,7 @@ def reg_fit(rec, snaps, cutoffs, at, lags, renew, seeds):
             cache[k] = (stack(snaps, cutoffs, extra), feats(snaps, extra, at))
         (Xr, yr), Xva = cache[k]
         ncols[t] = Xr.shape[1]
-        preds[t] = hurdle(Xr, yr[t], Xva, seeds)
+        preds[t] = hurdle(Xr, yr[t], Xva, seeds, params=params_for(rec))
     return preds, ncols
 
 
@@ -388,7 +454,8 @@ def main():
             tr = trainable_for(cutoffs, v)
             Xc, yc = stack(snaps, tr, XC)
             Xvc = feats(snaps, XC, v)
-            proba = bag_clf(Xc, yc.Opportunity.map(code).to_numpy(), Xvc, labels, seeds)
+            proba = bag_clf(Xc, yc.Opportunity.map(code).to_numpy(), Xvc, labels,
+                            seeds, params_for(rec)['clf'])
             opp, note = apply_rule(proba, labels, rec, snaps, cutoffs, v)
             reg, _ = reg_fit(rec, snaps, tr, v, lags, renew, seeds)
             yva = snaps[v][1]
@@ -408,7 +475,8 @@ def main():
     Xtc = feats(snaps, XC, TEST_CUTOFF)
     print(f'final fit: {len(cutoffs)} snapshots, {len(Xc)} rows, '
           f'{Xc.shape[1]} classifier features')
-    proba = bag_clf(Xc, yc.Opportunity.map(code).to_numpy(), Xtc, labels, seeds)
+    proba = bag_clf(Xc, yc.Opportunity.map(code).to_numpy(), Xtc, labels, seeds,
+                    params_for(rec)['clf'])
     if a.cache_test_proba:
         Path(a.cache_test_proba).parent.mkdir(exist_ok=True)
         proba.rename_axis('ID').reset_index().to_parquet(a.cache_test_proba, index=False)
