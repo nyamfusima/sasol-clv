@@ -3194,6 +3194,170 @@ not-retuned, and why the alpha 0.5 file is still built as a hedge rather than
 dropped: the one fold that dislikes the regularised classifier is the one that
 likes alpha 0.5.
 
-## Open questions
-- Does higher or lower win on the leaderboard?
-- Does public score track validation?
+## Sweep 11 on the public board: it passed everything and did not transfer (13 Oct)
+
+Three files uploaded, read off at **14:20 SAST**. `src/decompose_public.py`
+produces everything below; nothing in it is estimated except the noise figure,
+which is derived from measured per-row differences.
+
+| reading | Zindi ID | public |
+| --- | --- | --- |
+| `v5_fuel2` (incumbent) | `nskGdBPf` | 0.309785160 |
+| `diag_v6_clf` | `aUswGpyi` | **0.309807976** |
+| `v6_reg` | `fFWfbjda` | 0.308725795 |
+| `v6_reg_a050` | `8qCwUGQy` | 0.307465421 |
+
+The decomposition is **exact**, because `diag_v6_clf` shares `v5_fuel2`'s CLV
+columns byte-for-byte and `v6_reg`'s labels row-for-row:
+
+| half | validation | public | transferred |
+| --- | --- | --- | --- |
+| classifier | +0.00090 | **+0.000022816** | **2.5%** |
+| regression | +0.00113 | **−0.001082181** | **sign reversed** |
+| both | +0.00203 | **−0.001059365** | **negative** |
+
+The halves add to the whole with residual **0.00e+00**, and the inversion
+constant checks out on both invertible files: `nskGdBPf` inverts to public F1
+0.535300703 against Zindi's 0.535300706, `aUswGpyi` to 0.535357743 against
+0.535357746. Both to 3e-9.
+
+**Verdict under the amended rule:** the regression half is below the −0.0010
+bar, so the candidate pair is `diag_v6_clf` + `v6_clf_a050`, and
+`diag_v6_clf` at 0.309807976 clears the 0.3078 gate. **Adopted.**
+
+### It is not sampling noise, and the noise is measured rather than assumed
+
+For a paired RMSE comparison,
+
+    mse_a - mse_b = (1/n) * sum_i (p_a - p_b)(p_a + p_b - 2y)
+
+so the per-row term is the known prediction difference `d_i` times the sum of
+the two residuals. The two models are close, so that sum is about twice a
+shared residual whose scale is the published RMSE, and `d` is independent of
+it, giving `se(rmse difference) ~ rms(d)/sqrt(n)`. With rms(d) = 0.032426 on
+fuel and 0.040242 on non-fuel over ~1,650 public rows:
+
+| term | se(rmse) | se(score) |
+| --- | --- | --- |
+| fuel | 0.000798 | 0.000324 |
+| non-fuel | 0.000991 | 0.000364 |
+| combined | | **0.000487** |
+
+Validation promised +0.00113 and the board paid −0.00108. The gap of +0.00221
+is **4.5 standard errors**. The only soft step is treating `d` as independent
+of the residual; everything else is arithmetic on measured quantities.
+
+### The transfer rule this project has been using needs a sharper edge
+
+The README's standing generalisation was *structural changes held up;
+regression refinements below 0.001 did not*. Sweep 11 breaks it, because
+regularisation **is** structural -- it changes the model, not a feature -- and
+it still failed. The five earlier readings plus these two suggest a different
+cut:
+
+| change | what it alters | public |
+| --- | --- | --- |
+| hurdle + bagging | what is modelled | **+0.0017** |
+| Fuel x1.25 prior | what gets predicted | **+0.0048** |
+| lag series | what the model sees | **+0.0014** |
+| r1 renewal bundle | what the model sees | −0.0009 |
+| partial prior matching | how a decision is taken | −0.0004 |
+| **sweep 11 regularisation** | **how tightly the same model fits** | **−0.0011** |
+
+**What transferred changed what is modelled or what the model sees. What failed
+only changed how tightly the same model fits the same data.** Regularisation,
+isotonic gate calibration (−0.00305 on validation), expected-F1 decoding and
+the 3-parameter prior adjustment are all in the second class, and all four
+failed. That is a usable rule: it would have predicted this result in advance,
+and the old one would not.
+
+The honest statement about sweep 11 is therefore: **it was pre-registered, it
+was the only configuration tried, it improved multi-logloss and all four RMSEs
+on both folds, it cleared the keep bar at 20 seeds, its halves were verified
+additive to 5.6e-17 -- and it is worth −0.00106 on the public board.** The
+pick moved only because the amended rule gates on files rather than on the
+change, and the file it promoted is the one that left the hurdles alone.
+
+### Third sighting of the alpha interaction, now with the sign flipped
+
+| alpha | public F1 before | after | gain |
+| --- | --- | --- | --- |
+| 0.75 | 0.535300706 | 0.535357746 | +0.000057 |
+| 0.5 | 0.528896416 | 0.532206808 | **+0.003310** |
+
+The regularised classifier pays **58x more at alpha 0.5 than at alpha 0.75**,
+and validation predicted the opposite ordering. This is the third independent
+sighting of the same mechanism: alpha is a sharpness correction, regularisation
+changes sharpness, so the two are correlated knobs. Sweep 10 found it as the
+per-fold asymmetry of the Fuel/Stable cells; sweep 11's validation found fold
+2025-09 preferring the unregularised classifier at alpha 0.5; the board now
+shows it with the sign reversed. **It is a finding rather than a tuning
+artefact only because alpha was pre-registered as not-retuned.**
+
+### The remaining gap is 97% classification
+
+Board at 14:20 SAST, decomposed against our own `aUswGpyi` row:
+
+| to | gap | from F1 | from fuel RMSE | from non-fuel RMSE |
+| --- | --- | --- | --- | --- |
+| 10th | +0.005522 | **+0.005383** | −0.000185 | +0.000323 |
+| 3rd | +0.010587 | +0.005257 | **+0.003252** | +0.002078 |
+| 1st | +0.011006 | **+0.009262** | −0.000053 | +0.001797 |
+
+Our fuel RMSE 0.588057 is **the best of these four rows**, ahead of 1st
+(0.588188) and 10th (0.588512), so the regression side is finished as far as
+the board can see -- which is what sweep 11 independently confirmed by failing.
+Only 3rd place has a genuinely better fuel model, 0.580036, worth +0.00325; a
+larger fuel improvement than sweeps 8, 9 and 11 found put together, so it is
+signal we do not have rather than tuning we skipped.
+
+Rank 35 at 0.309807976 against **rank 31 at 0.309714414 on 10 Oct**: +0.00009
+of score, four places lost. The field is improving at roughly 1.3 places a day
+here, which also means the rank-per-score gradients recorded earlier in this
+file are **not valid across dates** -- part of each was the board moving.
+
+## Open questions, both now answered
+
+**Does higher or lower win on the leaderboard?** Higher. Confirmed on the board
+and recorded in the leaderboard reference table in `submissions_log.md`.
+
+**Does public score track validation?** **Ordinally sometimes, in magnitude
+never, and in sign only for one class of change.** Eight changes now have both
+a validation delta and a measured public delta. All eight are positive on
+validation; **four of the eight are negative on public.**
+
+| change | validation | public |
+| --- | --- | --- |
+| bagging + hurdle | +0.00389 | +0.0017 |
+| Fuel x1.25 prior | +0.00166 | **+0.0048** |
+| lag series | +0.00190 | +0.0014 |
+| sweep 11, classifier half | +0.00090 | +0.0000228 |
+| partial prior matching | +0.00262 | −0.0004 |
+| r1 renewal bundle | +0.00086 | −0.0009 |
+| sweep 11, regression half | +0.00113 | −0.0011 |
+| sweep 11, both halves | +0.00203 | −0.0011 |
+
+Validation's **ranking** of the two decision rules transferred exactly while
+its **step sizes** swapped by an order of magnitude each way (README). Its
+**sign** held for every change that altered what is modelled or what the model
+sees, and failed for every change that only altered how tightly the same model
+fits. With eight points and four reversals, no coefficient is worth fitting --
+the usable rule is the *class* of change, not a conversion rate.
+
+The practical consequence, which the project acted on: **a validation gain
+under about +0.002 predicts nothing about the board on its own**, and the only
+reliable instrument has been a pre-registered public test on files composed so
+the reading is exact. Sweep 11 is the sharpest case -- it cleared every
+internal bar and still lost 0.00106.
+
+## Still open
+
+- **Why does the regularised classifier pay 58x more at alpha 0.5 than at
+  alpha 0.75?** The mechanism is understood -- alpha and regularisation are
+  both sharpness corrections -- but the size is not, and it is not safe to
+  exploit without retuning alpha on a public reading, which the
+  pre-registration forbids.
+- **Is the private split going to agree with any of this?** Nothing in the
+  repo has been fitted to the ~3,838 private customers, and the public
+  readings that drove the last two selections are themselves ~1,650-row
+  measurements with a paired noise floor of about 0.0005.

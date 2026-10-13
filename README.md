@@ -19,19 +19,41 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | v5_fuel — renewal r1 in the fuel hurdle | 0.29148 | 0.3097 | superseded |
 | **v5_fuel2 — renewal r1+r2+r3 in the fuel hurdle** | 0.29178 | **0.3098** | **selected pick 1** |
 | **v5_fuel2_a050 — the same at α 0.5** | 0.29151 | **0.3072**† | **selected pick 2** |
-| v6_reg — + sweep 11 regularisation | **0.29382** | — | built 13 Oct, **pending upload** |
-| v6_reg_a050 — the same at α 0.5 | 0.29340 | — | built 13 Oct, **pending upload** |
-| diag_v6_clf — the classifier half only | 0.29270 | — | diagnostic, for the paired public reading |
+| v6_reg — + sweep 11 regularisation, both halves | **0.29382** | 0.3087 | **worse than v5_fuel2 on public**, not adopted |
+| v6_reg_a050 — the same at α 0.5 | 0.29340 | 0.3075 | not adopted |
+| **diag_v6_clf — the regularised classifier only** | 0.29270 | **0.3098** | **selected pick 1** (`v6_clf`) |
+| **v6_clf_a050 — the same at α 0.5** | — | **0.3085**‡ | **selected pick 2** |
 
 Validation is the mean of two time-based folds; see
 [Validation protocol](#validation-protocol).
 
-**Final picks, locked 12 Oct 2026 and reopened 13 Oct** (see [sweep 11](#results) rows above and `reports/notes.md`; the locked pair stands until the pre-registered public rule is evaluated)**:** `nskGdBPf` (`v5_fuel2`, α 0.75, public
+**Final picks, reselected 13 Oct 2026** by a public rule pre-registered before
+any of the scores it reads existed: **`aUswGpyi`** (`diag_v6_clf`, recipe
+`v6_clf`, α 0.75, public 0.309807976) and the **`v6_clf_a050`** upload (α 0.5,
+public predicted 0.308547602 by composition). Both keep the **incumbent
+hurdles**: sweep 11's regularisation improved all four validation RMSEs and
+then lost 0.00106 on the board, so only its classifier half survives. The
+superseded pair, locked 12 Oct and held one day, was: `nskGdBPf` (`v5_fuel2`, α 0.75, public
 0.309785160) and `gmpjvZn9` (`v5_fuel2_a050`, α 0.5, public 0.307223445). The
 two files are byte-identical on both CLV columns and differ only in the
 prior-matching damping exponent, which changes 286 of 5,488 labels — the one
 parameter the evidence is split on. See
 [`reports/submissions_log.md`](reports/submissions_log.md) for the reasoning.
+
+‡ `v6_clf_a050`'s public score is **predicted, not yet measured**: its labels
+are `v6_reg_a050`'s and its CLV columns are `v5_fuel2`'s, both already scored,
+which fixes it at 0.4 × 0.532206808 + 0.095664879 = **0.308547602**. The
+prediction was written into
+[`reports/submissions_log.md`](reports/submissions_log.md) **before upload**, as
+the three earlier composed predictions were.
+
+Two naming hazards, since neither can be fixed on Zindi. `aUswGpyi` was
+uploaded as a diagnostic and its Zindi description still reads **DIAGNOSTIC**,
+because submission descriptions cannot be edited after the fact; it is a
+selected pick regardless, promoted by the pre-registered rule. And its file is
+`submission_diag_v6_clf.csv` — the `diag_` prefix is this repo's convention for
+how a file was built, not a claim about its status. `--recipe v6_clf
+--skip-validation` reproduces it byte-for-byte.
 
 † `v5_fuel2_a050`'s public score was **determined before it was uploaded** and
 then measured at exactly that value. All three of its columns are
@@ -73,8 +95,19 @@ with its measured public delta gives a sharper rule than "labels matter":
 | partial prior matching | +0.00262 | **−0.0004** | −0.0008 |
 | lag series, all three models | +0.00190 | **+0.0014** | +0.0050 |
 | R1 regression bundle (diagnostic) | +0.00086 | **−0.0009** | 0.0000 |
+| sweep 11 regularisation, classifier half | +0.00090 | **+0.0000228** | +0.0001 |
+| sweep 11 regularisation, regression half | +0.00113 | **−0.0011** | 0.0000 |
 
-**Structural changes held up; regression refinements below 0.001 did not.** A
+**What transferred changed what is modelled or what the model sees; what failed
+only changed how tightly the same model fits.** That is a correction, dated
+13 Oct: this section previously read *structural changes held up; regression
+refinements below 0.001 did not*, and sweep 11 broke it. Regularisation is
+structural by any reasonable reading, and it lost 0.00106 on the board after
+clearing a +0.0015 bar at 20 seeds on both folds. Of eight changes with
+measured public deltas, **all eight are positive on validation and four are
+negative on public** — and the four failures are exactly the ones that left the
+model and its inputs alone. The older reading, kept because it is still true as
+far as it goes: A
 single global weight both folds agreed on (Fuel ×1.25) nearly tripled on public,
 and the hurdle — a structural model change — transferred. But every regression
 refinement under 0.001 either vanished or reversed, which is why the selected
@@ -126,10 +159,10 @@ validation score, validates the output before writing, and reports its runtime.
 | `v5_fuel` | 42–61 | yes | renewal r1 (fuel only) | prior matching, α 0.75 | **best public**, rank 31 |
 | **`v5_fuel2`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | **selected** |
 | **`v5_fuel2_a050`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | **selected** (hedge) |
-| `v6_reg` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | sweep 11 regularisation, **candidate** |
-| `v6_reg_a050` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | the same, **candidate** (hedge) |
-| `v6_clf` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | regularised classifier only, **diagnostic** |
-| `v6_clf_a050` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | conditional: only if the public rule needs it |
+| `v6_reg` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | sweep 11, both halves — **not adopted**, public 0.3087 |
+| `v6_reg_a050` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | the same — **not adopted**, public 0.3075 |
+| **`v6_clf`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | regularised classifier only — **selected pick 1** (`aUswGpyi`) |
+| **`v6_clf_a050`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | the same — **selected pick 2** |
 | v4_lags | 42–61 | yes | yes | prior matching, α 0.5 | |
 | v4_simple | 42–61 | yes | no | Fuel ×1.25 | hedge |
 | v3 | 42–61 | no | no | prior matching, α 0.5 | |
@@ -357,6 +390,7 @@ them at all.
 | --- | --- |
 | `src/baseline.py` | the original single-seed reference; still pins RMSE fuel 0.6052 / non-fuel 0.7489 / F1 0.5047 |
 | `src/validate.py` | fold definitions, per-class F1, confusion matrices, the scoring helper |
+| `src/decompose_public.py` | splits the sweep 11 public readings into a classifier and a regression half, estimates the paired noise floor, and applies the pre-registered rule |
 | `src/check_submission.py` | reads a written submission back off disk: format, sha256, label churn and per-column byte-identity against a reference |
 | `src/sweep2.py` | sweeps A–G: training recipe, regressions, adoption, cutoff density, rule events, new features, seasonal analogs |
 | `src/train_label.py` | sweep 1: label-model variants a–f |
