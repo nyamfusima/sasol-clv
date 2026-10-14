@@ -410,6 +410,7 @@ them at all.
 | `src/sweep9.py` | sweep 9: renewal blocks for the CLV_fuel hurdle only |
 | `src/sweep10.py` | sweep 10: the Fuel/Stable decision boundary, closed by its own oracle |
 | `src/sweep11.py` | sweep 11: LightGBM regularisation, the one thing never tuned since day one |
+| `src/sweep12.py` | sweep 12: classifier feature subsampling, the last untouched knob; arm A re-derives `v6_clf` as a determinism check |
 | `src/features2.py` | block F feature groups (customer id, sites, fuel type/price, timing, vouchers) |
 | `src/features4.py` | sweep 6 blocks N1–N6 (own label history, per-category history, recency, basket structure, weekly series, longer lookback) |
 | `src/stability.py` | seed-stability analysis and the 20-seed bag |

@@ -3587,6 +3587,133 @@ reading is not a result and is not recorded as one; it is not in
 `preds/sweep12.json` under either reported key. The rule above is the one in
 the `sweep12.py` docstring, which was written before anything was run at all.
 
+## Sweep 12 result: closed at 20 seeds, and the lead did not hold its shape (14 Oct)
+
+`python src/sweep12.py --confirm --fresh-a --fresh-reg`, seeds 42-61, both
+folds, 4,238 s. Arm A refitted rather than read from cache, and the hurdles
+refitted too, so every number below was produced in one process.
+
+| | A (v6_clf, 0.7) 06 | A 09 | B (0.4) 06 | B 09 |
+| --- | --- | --- | --- | --- |
+| multi-logloss | 1.287110 | 1.271238 | **1.285342** | **1.269910** |
+| weighted F1, alpha 0.75 | 0.516613 | 0.515749 | **0.517419** | **0.517368** |
+| weighted F1, alpha 0.5 | **0.514386** | **0.515848** | 0.513148 | 0.514280 |
+| score, alpha 0.75 | 0.295423 | 0.289969 | **0.295745** | **0.290616** |
+| score, alpha 0.5 | **0.294532** | **0.290008** | 0.294037 | 0.289381 |
+| RMSE fuel (shared) | 0.594468 | 0.597948 | 0.594468 | 0.597948 |
+| RMSE non-fuel (shared) | 0.735003 | 0.745062 | 0.735003 | 0.745062 |
+
+Deltas, B minus A:
+
+| | 2025-06 | 2025-09 | mean |
+| --- | --- | --- | --- |
+| multi-logloss | **-0.001768** | **-0.001328** | **-0.001548** |
+| F1, alpha 0.75 | +0.000806 | +0.001619 | +0.001213 |
+| score, alpha 0.75 | +0.000323 | +0.000648 | **+0.000485** |
+| F1, alpha 0.5 | -0.001238 | -0.001569 | -0.001403 |
+| score, alpha 0.5 | -0.000495 | -0.000627 | **-0.000561** |
+
+### Verdict against the pre-registered rule: FAILS on condition 1
+
+| condition | required | measured | |
+| --- | --- | --- | --- |
+| 1. mean score gain at alpha 0.75 | >= +0.0015 | **+0.000485** | **FAIL** |
+| 2. better on both folds at alpha 0.75 | both > 0 | +0.00032 / +0.00065 | PASS |
+| 3. multi-logloss not worse on either fold | both <= 0 | -0.00177 / -0.00133 | PASS |
+
+**Not adopted.** The mean score gain is **a third of the bar**. No `v7_clf`
+recipe was added, no file was built, nothing was submitted, and the
+pre-registered public rule never fires: with no v7 upload to read, the picks
+stay **`aUswGpyi` + `YtE13kSr`**.
+
+### The lead did not reproduce in shape, and that is the result
+
+The external screen (base 97 features, 3 seeds) and the in-harness 20-seed test
+disagree about *which half* of the effect is real:
+
+| | external lead | in-harness, 20 seeds | |
+| --- | --- | --- | --- |
+| multi-logloss | -0.0005 / -0.0006 | **-0.00177 / -0.00133** | **3x better than the lead** |
+| F1, alpha 0.75 | +0.0056 / +0.0026 | **+0.0008 / +0.0016** | **4.6x smaller** |
+| F1, alpha 0.5 | +0.0024 / -0.0031 | -0.0012 / -0.0016 | now negative on both |
+
+The pre-registration said to treat the F1 gain as likely decision noise until
+20 seeds said otherwise, and **20 seeds said it was decision noise**: +0.0056
+on fold 2025-06 at 3 seeds became +0.0008 at 20. The logloss gain went the
+other way and came in three times larger than the lead, consistent on both
+folds. So the change is real -- it just is not the size the lead advertised,
+and the part that shrank is the part the score is paid on.
+
+### The first change in this project to improve probabilities on both folds and still be rejected
+
+Worth recording precisely, because it cuts against the rule the earlier sweeps
+established. Condition 3 was added after sweep 11 passed the magnitude bar
+without ever showing a probability gain. Sweep 12 is its mirror image: it
+**passes condition 3 cleanly** -- multi-logloss improves on both folds, by more
+than the lead promised -- and fails on magnitude instead. The new condition did
+not do the rejecting.
+
+That makes `colsample_bytree` 0.4 a **genuine but small** improvement to the
+17-class probabilities, which is a different object from sweep 11's F1 movement
+and from the blend screen's. It is the only classifier change in twelve sweeps
+with a both-fold logloss gain that this project believes. It is still not
+adoptable, for the ordinary reason: +0.001213 of F1 is +0.000485 of score,
+below a bar set at +0.0015 precisely because gains under it have not survived
+contact with the board. Applying the one measured transfer rate for a
+classifier-only F1 change -- sweep 11's +0.0009 validation to +0.0000228 public,
+about 2.5% -- puts its expected public value at **+0.00003 of F1**, or about
++0.00001 of score. That is three orders of magnitude below the +0.0138 of
+public F1 that separates us from 10th.
+
+### Fifth sighting of the alpha interaction, and the cleanest one
+
+At alpha 0.75 arm B is better on both folds; at alpha 0.5 it is **worse on both
+folds**, -0.0012 and -0.0016 of F1. The probabilities are strictly better under
+both readings -- the logloss does not depend on alpha -- so this is as clean as
+the interaction gets: **strictly better probabilities, strictly worse decisions
+at alpha 0.5, on both folds at 20 seeds.** Sweep 11 showed the same knobs
+interacting with the sign going the other way (the regularised classifier paid
+58x more at alpha 0.5 than at 0.75 on the public board). Prior matching damped
+at a fixed alpha is **not** a monotone function of probability quality, and
+alpha would have to be retuned to collect what better probabilities are worth.
+The pre-registration forbids that, which is the only reason the sweep 11
+finding counts as a finding and not a tuning artefact, so it is not collected
+here either.
+
+### A determinism result, obtained for free
+
+Arm A is sweep 11's `B_clf` arm -- `v6_clf` as shipped -- so refitting it a day
+later in a fresh process re-derives a published row. It reproduced **exactly**:
+
+| | 2025-06 | 2025-09 |
+| --- | --- | --- |
+| multi-logloss | 0.00e+00 | 0.00e+00 |
+| F1 alpha 0.75 | 0.00e+00 | 0.00e+00 |
+| F1 alpha 0.5 | 0.00e+00 | 0.00e+00 |
+| score alpha 0.75 | 0.00e+00 | 0.00e+00 |
+
+The independently refitted 20-seed hurdles reproduced all four cached RMSEs to
+**all 17 significant digits** (0.59446801182876507, 0.73500345009534784,
+0.59794766907924191, 0.74506159259253324). So the 20-seed fits behind
+`aUswGpyi` are pinned by their seeds across processes and days, not merely
+asserted to be. This is the second such confirmation, after the interrupted
+sweep 11 re-run.
+
+The affine identity `score_delta == 0.4 * F1_delta` is asserted at runtime in
+`sweep12.py` and held on every cell, which is what makes the paired comparison
+exact rather than approximate.
+
+### Sweep 12 is closed
+
+Twelve sweeps. The classifier's last untouched hyperparameter
+moves its probabilities in the right direction by a third of what would be
+needed, and moves its decisions the wrong way at one of the two shipped alphas.
+Combined with the true-mix diagnostic above -- an oracle class mix is worth
+zero -- both halves of the label pipeline are now bounded: **the decision rule
+has no headroom under an oracle, and the probability side has headroom worth
+about +0.0005 of score, a third of the keep bar and a fraction of the gap to
+the leaders.** Modelling is closed.
+
 ## Open questions, both now answered
 
 **Does higher or lower win on the leaderboard?** Higher. Confirmed on the board
@@ -3627,7 +3754,12 @@ internal bar and still lost 0.00106.
   alpha 0.75?** The mechanism is understood -- alpha and regularisation are
   both sharpness corrections -- but the size is not, and it is not safe to
   exploit without retuning alpha on a public reading, which the
-  pre-registration forbids.
+  pre-registration forbids. Sweep 12 sharpened the question without answering
+  it: at `colsample_bytree` 0.4 the probabilities are better on both folds and
+  the alpha 0.5 decisions are **worse** on both folds, so the interaction is
+  not a quirk of regularisation specifically and prior matching at a fixed
+  alpha is not monotone in probability quality. Five sightings now, two of them
+  with opposite signs.
 - **Is the private split going to agree with any of this?** Nothing in the
   repo has been fitted to the ~3,838 private customers, and the public
   readings that drove the last two selections are themselves ~1,650-row
