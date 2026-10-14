@@ -2602,7 +2602,8 @@ that must exclude suspend would need `time.process_time()`, or
 
 `v5_fuel2` (`nskGdBPf`) scored **0.309785160**, fuel RMSE **0.588056839** against
 `v5_fuel`'s 0.588231347. The pre-registered test -- public fuel RMSE must improve
--- passed by -0.000175, so it is **adopted** as selected pick 1.
+-- passed by -0.000175, so it is **adopted** as selected pick 1. It held that
+slot until 13 Oct, when the sweep 11 public reading reselected `aUswGpyi`.
 
 The score gain is +0.000071. The interesting number is not that, it is the ratio:
 
@@ -3315,6 +3316,81 @@ Rank 35 at 0.309807976 against **rank 31 at 0.309714414 on 10 Oct**: +0.00009
 of score, four places lost. The field is improving at roughly 1.3 places a day
 here, which also means the rank-per-score gradients recorded earlier in this
 file are **not valid across dates** -- part of each was the board moving.
+
+**14 Oct, final: rank 37** on the same 0.309807976, two further places lost in
+a day **without a single submission of ours** -- six places in four days at a
+flat score, confirming the drift rate above. Reaching 10th from here would
+need public weighted F1 **0.5492**, **+0.0138** over `aUswGpyi`'s 0.535357743.
+For scale, that is 240x what sweep 11's classifier half actually paid on the
+board (+0.000057). **Modelling is closed**; the remaining gap is signal we do
+not have, not tuning we skipped.
+
+## External screen, 14 Oct: classifier model-family blend (outside the repo, negative)
+
+Run outside the repo on the **base 97 features**, to test the one thing the
+eleven sweeps never varied: the **model family** of the classifier. Nothing was
+added to the repo, no file was built and no submission was made. Three families
+and three blends, every one read through the project's own decision rule at
+**alpha 0.75 and alpha 0.5**:
+
+- **L** -- regularised LightGBM, the sweep 11 configuration, 3 seeds
+- **C** -- CatBoost, depth 6, 800 iterations, lr 0.05, l2 5
+- **LR** -- multinomial logistic regression on quantile-normalised features
+- blends **L+C**, **0.75L+0.25LR** (written L+LR below), **0.4L+0.4C+0.2LR**
+
+### Probability quality: no blend improves on L
+
+Multi-logloss, folds 2025-06 / 2025-09:
+
+| model | 2025-06 | 2025-09 |
+| --- | --- | --- |
+| **L** | **1.2882** | 1.2715 |
+| L+C | 1.2914 | 1.2749 |
+| L+LR | 1.2902 | **1.2708** |
+| L+C+LR | 1.2919 | 1.2735 |
+
+**No blend improves logloss on fold 2025-06**, and L wins it outright. L+LR
+takes fold 2025-09 by 0.0007 while losing fold 2025-06 by 0.0020, so it fails
+the both-folds standard this project has required since sweep 5. CatBoost hurts
+the blend on both folds, which is the clearest reading here: a second tree
+family adds nothing to a LightGBM bag on these features.
+
+### Weighted F1: movement at alpha 0.75 only, and below the bar
+
+Delta against L:
+
+| blend | alpha 0.75 | alpha 0.5 |
+| --- | --- | --- |
+| L+C | +0.0017 | negative |
+| 0.75L+0.25LR | +0.0015 | negative |
+| **0.4L+0.4C+0.2LR** | **+0.0036** | negative |
+
+At alpha 0.5 **every blend is negative**, between -0.0003 and -0.0035. The best
+cell anywhere is 0.4L+0.4C+0.2LR at alpha 0.75: +0.0036 F1, worth **+0.00144**
+of score -- **below the +0.0015 keep bar**, and that is before any transfer
+discount.
+
+### Verdict: closed, nothing added
+
+The logloss table and the F1 table disagree, and the logloss table is the one
+measuring what was actually changed. There is **no probability-quality gain**,
+so the alpha-0.75-only F1 movement is not a better model: it is the
+**decision-rule interaction already identified in sweep 11**. Alpha is a
+sharpness correction and a blend is a sharpness change, exactly as
+regularisation was, which is why the movement appears under one alpha and
+reverses under the other. That is now the **fourth sighting** of this
+interaction.
+
+The interaction also has a measured transfer rate, which is what makes this
+decidable rather than arguable: sweep 11's classifier half was +0.0009 on
+validation and **+0.0000228** on the public board, about **2.5%**. Applied to
++0.00144 that leaves nothing worth a submission slot. Exploiting the alpha side
+instead would mean retuning alpha against a public reading, which the
+pre-registration forbids -- and alpha-not-retuned is the only reason the sweep
+11 finding counts as a finding rather than a tuning artefact.
+
+So a fourth model family and three blends leave the classifier where sweep 11
+left it. **Closed.**
 
 ## Open questions, both now answered
 

@@ -17,35 +17,46 @@ Solo entry. Per customer, predict for Dec 2025 – Feb 2026: fuel litres
 | v4_simple — lag classifier, Fuel ×1.25 rule | 0.28796 | 0.3049 | submitted, not selected |
 | v5_reg — renewal features in both hurdles | 0.29188 | 0.3092 | diagnostic, not adopted |
 | v5_fuel — renewal r1 in the fuel hurdle | 0.29148 | 0.3097 | superseded |
-| **v5_fuel2 — renewal r1+r2+r3 in the fuel hurdle** | 0.29178 | **0.3098** | **selected pick 1** |
-| **v5_fuel2_a050 — the same at α 0.5** | 0.29151 | **0.3072**† | **selected pick 2** |
+| v5_fuel2 — renewal r1+r2+r3 in the fuel hurdle | 0.29178 | 0.3098 | pick 1 until 13 Oct |
+| v5_fuel2_a050 — the same at α 0.5 | 0.29151 | 0.3072† | pick 2 until 13 Oct |
 | v6_reg — + sweep 11 regularisation, both halves | **0.29382** | 0.3087 | **worse than v5_fuel2 on public**, not adopted |
 | v6_reg_a050 — the same at α 0.5 | 0.29340 | 0.3075 | not adopted |
-| **diag_v6_clf — the regularised classifier only** | 0.29270 | **0.3098** | **selected pick 1** (`v6_clf`) |
-| **v6_clf_a050 — the same at α 0.5** | — | **0.3085**‡ | **selected pick 2** |
+| **diag_v6_clf — the regularised classifier only** | 0.29270 | **0.3098** | **final pick 1** — `aUswGpyi` |
+| **v6_clf_a050 — the same at α 0.5** | 0.29227 | **0.3085**‡ | **final pick 2** — `YtE13kSr` |
 
 Validation is the mean of two time-based folds; see
 [Validation protocol](#validation-protocol).
 
-**Final picks, reselected 13 Oct 2026** by a public rule pre-registered before
-any of the scores it reads existed: **`aUswGpyi`** (`diag_v6_clf`, recipe
-`v6_clf`, α 0.75, public 0.309807976) and the **`v6_clf_a050`** upload (α 0.5,
-public predicted 0.308547602 by composition). Both keep the **incumbent
-hurdles**: sweep 11's regularisation improved all four validation RMSEs and
-then lost 0.00106 on the board, so only its classifier half survives. The
-superseded pair, locked 12 Oct and held one day, was: `nskGdBPf` (`v5_fuel2`, α 0.75, public
-0.309785160) and `gmpjvZn9` (`v5_fuel2_a050`, α 0.5, public 0.307223445). The
-two files are byte-identical on both CLV columns and differ only in the
-prior-matching damping exponent, which changes 286 of 5,488 labels — the one
-parameter the evidence is split on. See
+**Final picks, locked 14 Oct 2026**, both measured, chosen by a public rule
+pre-registered before any of the scores it reads existed:
+
+| pick | file | recipe | α | Zindi ID | public |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `submission_diag_v6_clf.csv` | `v6_clf` | 0.75 | **`aUswGpyi`** | **0.309807976** |
+| 2 | `submission_v6_clf_a050.csv` | `v6_clf_a050` | 0.5 | **`YtE13kSr`** | **0.308547602** |
+
+The two files are **byte-identical on both CLV columns** and differ only in the
+prior-matching damping exponent, which changes **318 of 5,488 labels** — the one
+parameter the evidence is split on, so the pair spans it rather than agreeing
+with itself. Both keep the **incumbent hurdles**: sweep 11's regularisation
+improved all four validation RMSEs and then lost 0.00106 on the board, so only
+its classifier half survives.
+
+No other submission is selected. The superseded pair, locked 12 Oct and held
+one day, was `nskGdBPf` (`v5_fuel2`, α 0.75, public 0.309785160) and
+`gmpjvZn9` (`v5_fuel2_a050`, α 0.5, public 0.307223445); before that,
+`A37bufRz` and `rjQUYHF9`. See
 [`reports/submissions_log.md`](reports/submissions_log.md) for the reasoning.
 
-‡ `v6_clf_a050`'s public score is **predicted, not yet measured**: its labels
-are `v6_reg_a050`'s and its CLV columns are `v5_fuel2`'s, both already scored,
-which fixes it at 0.4 × 0.532206808 + 0.095664879 = **0.308547602**. The
-prediction was written into
-[`reports/submissions_log.md`](reports/submissions_log.md) **before upload**, as
-the three earlier composed predictions were.
+‡ `v6_clf_a050`'s public score was **determined before it was uploaded** and
+then measured at exactly that value. Its labels are `v6_reg_a050`'s and its CLV
+columns are `v5_fuel2`'s, both already scored, which fixed it at
+0.4 × 0.532206808 + 0.095664879 = **0.3085476022**. The prediction was written
+into [`reports/submissions_log.md`](reports/submissions_log.md) **before
+upload**; uploaded 14 Oct as `YtE13kSr`, it returned **0.308547602** (F1
+0.53220681, RMSE fuel 0.588056839, non-fuel 0.723339664) — a residual of
+**7.8e-10**, so all three byte-identity premises held. It is the **fourth
+composed prediction in this project to be confirmed by measurement**.
 
 Two naming hazards, since neither can be fixed on Zindi. `aUswGpyi` was
 uploaded as a diagnostic and its Zindi description still reads **DIAGNOSTIC**,
@@ -157,12 +168,12 @@ validation score, validates the output before writing, and reports its runtime.
 | v4_alpha075 | 42–61 | yes | no | prior matching, α 0.75 | former pick 1 |
 | `v5_reg` | 42–61 | yes | renewal (both targets) | prior matching, α 0.75 | diagnostic, **not adopted** |
 | `v5_fuel` | 42–61 | yes | renewal r1 (fuel only) | prior matching, α 0.75 | **best public**, rank 31 |
-| **`v5_fuel2`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | **selected** |
-| **`v5_fuel2_a050`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | **selected** (hedge) |
+| `v5_fuel2` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | former pick 1, 12–13 Oct |
+| `v5_fuel2_a050` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | former pick 2, 12–13 Oct (hedge) |
 | `v6_reg` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | sweep 11, both halves — **not adopted**, public 0.3087 |
 | `v6_reg_a050` | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | the same — **not adopted**, public 0.3075 |
-| **`v6_clf`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | regularised classifier only — **selected pick 1** (`aUswGpyi`) |
-| **`v6_clf_a050`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | the same — **selected pick 2** |
+| **`v6_clf`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.75 | regularised classifier only — **final pick 1** (`aUswGpyi`) |
+| **`v6_clf_a050`** | 42–61 | yes | renewal r1+r2+r3 (fuel only) | prior matching, α 0.5 | the same — **final pick 2** (`YtE13kSr`) |
 | v4_lags | 42–61 | yes | yes | prior matching, α 0.5 | |
 | v4_simple | 42–61 | yes | no | Fuel ×1.25 | hedge |
 | v3 | 42–61 | no | no | prior matching, α 0.5 | |

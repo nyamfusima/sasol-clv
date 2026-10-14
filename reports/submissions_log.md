@@ -13,12 +13,12 @@ Validation = train on snapshots ending before 1 Sep 2025, score on the 1 Sep 202
 | 2026-10-08 | submission_v4_alpha075.csv | v4_hybrid with prior matching at alpha 0.75 (same file as submission_diag_alpha075.csv) | 0.5996 | 0.7451 | 0.5139 | **0.3077** | Zindi ID **A37bufRz**, rank 37. Public 0.307714693 = F1 0.535300706 / rmse 0.593163991 / 0.723339664. Pre-registered as a diagnostic with bar F1>0.533, cleared it, so promoted to **selected** at the time (pick 1 until 11 Oct; superseded by nskGdBPf). Folds disagreed on alpha; see notes. `submission_diag_alpha075.csv` and `submission_v4_alpha075.csv` are the SAME file, kept under both names so the pre-registration history stays readable; `--recipe v4_alpha075 --skip-validation` reproduces it byte-identically |
 | 2026-10-10 | submission_diag_v5_reg.csv | v4_alpha075 with the r1 renewal block added to the hurdle regressions (131 regression features, 20 seeds). Opportunity column **identical on all 5,488 rows** to submission_v4_alpha075.csv | 0.5982 | 0.7450 | 0.5139 | **0.3092** | Zindi ID **p7G9LVTM**. Public 0.309155505 = F1 0.535300706 / rmse 0.588231347 / 0.724859897. Pre-registered rule: adopt only if public RMSE improves on BOTH targets and the score gain is at least +0.0005 over A37bufRz. Fuel -0.00493 **pass**, non-fuel +0.00152 **FAIL**, score +0.00144 pass. The both-targets clause fails, so **v5_reg is NOT adopted** |
 | 2026-10-10 | submission_v5_fuel.csv | **POST-HOC.** v4_alpha075 except the CLV_fuel hurdle uses base + r1 renewal (131 features); CLV_nonfuel stays on base (97). Opportunity and CLV_nonfuel identical to submission_v4_alpha075.csv on all 5,488 rows; CLV_fuel identical to submission_diag_v5_reg.csv | 0.5982 | 0.7451 | 0.5139 | **0.3097** | Zindi ID **DapJS5NA**. Public **0.309714414**, rank **31**. validation **0.29148** (+0.00053 over v4_alpha075). Because all three columns are byte-identical to their sources, its public score is **determined, not estimated**: 0.4*0.535300706 + 0.3*(1-0.588231347/0.74) + 0.3*(1-0.723339664/0.816) = **0.309714415**, +0.002000 over A37bufRz. The per-target split was chosen **after** seeing p7G9LVTM's public result |
-| 2026-10-11 | submission_v5_fuel2.csv | sweep 9: v5_fuel with all three renewal blocks for the CLV_fuel hurdle (163 fuel features, 97 non-fuel). Opportunity and CLV_nonfuel identical to submission_v4_alpha075.csv on all 5,488 rows | 0.5979 | 0.7451 | 0.5139 | **0.30979** | Zindi ID **nskGdBPf**. Public 0.309785160 = F1 0.535300706 / rmse **0.588056839** / 0.723339664. Pre-registered test was "public CLV Fuel RMSE improves on 0.588231347": it did, by **-0.000175**, so **ADOPTED** as selected pick 1. Validation 0.29178. Caveat recorded in advance: r2 and r3 each worsen fuel RMSE standalone, so the gain is an interaction, and it transferred at 0.23x against r1's 3.8x |
-| 2026-10-11 | submission_v5_fuel2_a050.csv | the alpha 0.5 hedge brought up to date: v5_fuel2 regressions with alpha 0.5. Opportunity identical to submission_v4_hybrid.csv and both CLV columns identical to submission_v5_fuel2.csv, all on 5,488/5,488 rows | 0.5979 | 0.7451 | 0.5132 | **0.30722** | Zindi IDs **ai8DbQB7** and **gmpjvZn9** (resubmission), both **0.307223445**, identical to all nine digits. Validation **0.29151** (+0.00083 over v4_hybrid). The score was **determined before upload** -- 0.4*0.528896416 + 0.3*(1-0.588056839/0.74) + 0.3*(1-0.723339664/0.816) = 0.307223445 -- and measured at exactly that, residual **1.8e-10**. +0.002070 over rjQUYHF9. **gmpjvZn9 is SELECTED pick 2** |
+| 2026-10-11 | submission_v5_fuel2.csv | sweep 9: v5_fuel with all three renewal blocks for the CLV_fuel hurdle (163 fuel features, 97 non-fuel). Opportunity and CLV_nonfuel identical to submission_v4_alpha075.csv on all 5,488 rows | 0.5979 | 0.7451 | 0.5139 | **0.30979** | Zindi ID **nskGdBPf**. Public 0.309785160 = F1 0.535300706 / rmse **0.588056839** / 0.723339664. Pre-registered test was "public CLV Fuel RMSE improves on 0.588231347": it did, by **-0.000175**, so **ADOPTED** as selected pick 1 at the time (pick 1 until 13 Oct; superseded by `aUswGpyi`). Validation 0.29178. Caveat recorded in advance: r2 and r3 each worsen fuel RMSE standalone, so the gain is an interaction, and it transferred at 0.23x against r1's 3.8x |
+| 2026-10-11 | submission_v5_fuel2_a050.csv | the alpha 0.5 hedge brought up to date: v5_fuel2 regressions with alpha 0.5. Opportunity identical to submission_v4_hybrid.csv and both CLV columns identical to submission_v5_fuel2.csv, all on 5,488/5,488 rows | 0.5979 | 0.7451 | 0.5132 | **0.30722** | Zindi IDs **ai8DbQB7** and **gmpjvZn9** (resubmission), both **0.307223445**, identical to all nine digits. Validation **0.29151** (+0.00083 over v4_hybrid). The score was **determined before upload** -- 0.4*0.528896416 + 0.3*(1-0.588056839/0.74) + 0.3*(1-0.723339664/0.816) = 0.307223445 -- and measured at exactly that, residual **1.8e-10**. +0.002070 over rjQUYHF9. **gmpjvZn9 was selected pick 2 from 12 Oct until 13 Oct**, then superseded by `YtE13kSr` |
 | 2026-10-13 | submission_v6_reg.csv | sweep 11: v5_fuel2 with the regularised LightGBM settings on all three models (clf and gate num_leaves 7 / min_child_samples 100 / reg_lambda 5, mag num_leaves 15 / 100 / 5), alpha 0.75. Features unchanged -- 159 classifier, CLV_fuel 163, CLV_nonfuel 97, identical to v5_fuel2 | 0.5972 | 0.7436 | 0.5157 | **0.30873** | Zindi ID **fFWfbjda**. Public **0.308725795**, which is **−0.001059 BELOW v5_fuel2** -- the change is negative on the public board. Expected 0.311815160 if validation transferred 1:1, so it missed by **−0.003089**. sha256 **29798d57fc706f98**. Validation **0.29382** (folds 0.29684 / 0.29081), +0.00203 over v5_fuel2, confirmed at 20 seeds on both folds. **306 of 5,488 labels** differ from v5_fuel2 (5.58%); CLV mean abs change fuel 0.020848 / non-fuel 0.025726. Expected public **0.311815160** if validation transfers 1:1. Built in 1425 s with `--recipe v6_reg --skip-validation`; single build, justified by the determinism re-run in notes.md. **Candidate pick 1** under the amended public rule |
 | 2026-10-13 | submission_v6_reg_a050.csv | the same at alpha 0.5. Both CLV columns **byte-identical to submission_v6_reg.csv** on 5,488/5,488 rows | 0.5972 | 0.7436 | 0.5158 | **0.30747** | Zindi ID **8qCwUGQy**. Public **0.307465421**, +0.000242 over gmpjvZn9. Expected 0.309103445, missed by **−0.001638**. Its implied public F1 is **0.532206808**, +0.003310 over v5_fuel2_a050 -- the regularised classifier pays **58x more at alpha 0.5 than at alpha 0.75**, where it bought +0.000057. sha256 **6d910200f48e94c3**. Validation **0.29340** (folds 0.29595 / 0.29085), +0.00188 over v5_fuel2_a050. Differs from v6_reg on **318 labels** (the alpha span; the v5 pair differed on 286) and from v5_fuel2_a050 on 265. Expected public **0.309103445** if validation transfers 1:1. Built in 1406 s. **Candidate pick 2** under the amended public rule |
-| 2026-10-13 | submission_diag_v6_clf.csv | **DIAGNOSTIC, not a candidate** unless the amended rule's second branch promotes it: the regularised classifier with the **incumbent** hurdles. Opportunity **identical on all 5,488 rows** to submission_v6_reg.csv; both CLV columns **byte-identical to submission_v5_fuel2.csv** | 0.5979 | 0.7451 | 0.5157 | **0.30981** | Zindi ID **aUswGpyi**. Public **0.309807976**, the project's best, and **PROMOTED to selected pick 1** under the amended rule's second branch. But the margin is +0.000022816 over v5_fuel2 -- a public F1 gain of +0.000057 against a validation expectation of +0.00090, so the classifier half transferred at about **2.5%**. Expected 0.310685160, missed by −0.000877. sha256 **993c1d71cb8bae2b**. Validation **0.29270** (+0.00090 over v5_fuel2 -- below the +0.0015 keep bar, which is why the classifier half is not adoptable alone). Exists to split the public gain: because its CLV columns carry v5_fuel2's already-published components (fuel 0.588056839, non-fuel 0.723339664), its RMSE half is the **known constant 0.095664879**, so its score inverts to the new public F1 exactly -- `F1_v6 = (public - 0.095664879) / 0.4`. The same inversion reproduces v5_fuel2's logged public F1 0.535300706 to 3e-9. Expected public **0.310685160** if validation transfers 1:1. Built in 1432 s |
-| 2026-10-13 | submission_v6_clf_a050.csv | **SELECTED pick 2.** The regularised classifier with the **incumbent** hurdles at alpha 0.5 -- recipe `v6_clf_a050`, built only because the amended rule reached its second branch. Opportunity **identical on all 5,488 rows** to submission_v6_reg_a050.csv; both CLV columns **byte-identical to submission_v5_fuel2.csv** | 0.5979 | 0.7451 | 0.5158 | *predicted* **0.308548** | sha256 **64cf8b8e9278fdf1**. Validation **0.29227** (+0.00076 over v5_fuel2_a050 at 20 seeds -- below the keep bar, as the classifier half is everywhere). Its public score is **determined before upload** by composition: 0.4*0.532206808 + 0.095664879 = **0.308547602**, where the F1 comes from 8qCwUGQy's implied public F1 and the RMSE half from nskGdBPf's published components. Both premises are **verified, not assumed** -- the label and CLV identities above were checked row-by-row by `src/check_submission.py`. If the upload returns anything else to ~1e-9, one of them is wrong. That would be **+0.001324 over gmpjvZn9**. Note the 1:1 validation projection would have said 0.307983445, so even here validation under-predicts what composition determines. Built in 1412 s |
+| 2026-10-13 | submission_diag_v6_clf.csv | **DIAGNOSTIC, not a candidate** unless the amended rule's second branch promotes it: the regularised classifier with the **incumbent** hurdles. Opportunity **identical on all 5,488 rows** to submission_v6_reg.csv; both CLV columns **byte-identical to submission_v5_fuel2.csv** | 0.5979 | 0.7451 | 0.5157 | **0.30981** | Zindi ID **aUswGpyi**. Public **0.309807976**, the project's best, and **PROMOTED to selected pick 1** under the amended rule's second branch; it is the **final pick 1**. But the margin is +0.000022816 over v5_fuel2 -- a public F1 gain of +0.000057 against a validation expectation of +0.00090, so the classifier half transferred at about **2.5%**. Expected 0.310685160, missed by −0.000877. sha256 **993c1d71cb8bae2b**. Validation **0.29270** (+0.00090 over v5_fuel2 -- below the +0.0015 keep bar, which is why the classifier half is not adoptable alone). Exists to split the public gain: because its CLV columns carry v5_fuel2's already-published components (fuel 0.588056839, non-fuel 0.723339664), its RMSE half is the **known constant 0.095664879**, so its score inverts to the new public F1 exactly -- `F1_v6 = (public - 0.095664879) / 0.4`. The same inversion reproduces v5_fuel2's logged public F1 0.535300706 to 3e-9. Expected public **0.310685160** if validation transfers 1:1. Built in 1432 s |
+| 2026-10-13 | submission_v6_clf_a050.csv | **FINAL pick 2** (`YtE13kSr`). The regularised classifier with the **incumbent** hurdles at alpha 0.5 -- recipe `v6_clf_a050`, built only because the amended rule reached its second branch. Opportunity **identical on all 5,488 rows** to submission_v6_reg_a050.csv; both CLV columns **byte-identical to submission_v5_fuel2.csv** | 0.5979 | 0.7451 | 0.5158 | **0.308548** | Zindi ID **YtE13kSr**. Public **0.308547602** = F1 **0.53220681** / rmse **0.588056839** / **0.723339664**, **exactly the value predicted before upload** (residual 7.8e-10 against the determined 0.3085476022). sha256 **64cf8b8e9278fdf1**. Validation **0.29227** (+0.00076 over v5_fuel2_a050 at 20 seeds -- below the keep bar, as the classifier half is everywhere). Its public score is **determined before upload** by composition: 0.4*0.532206808 + 0.095664879 = **0.308547602**, where the F1 comes from 8qCwUGQy's implied public F1 and the RMSE half from nskGdBPf's published components. Both premises are **verified, not assumed** -- the label and CLV identities above were checked row-by-row by `src/check_submission.py`. The upload returned exactly that, so both premises held -- **the fourth composed prediction in this project to be confirmed by measurement**. It is **+0.001324 over gmpjvZn9**. Note the 1:1 validation projection would have said 0.307983445, so even here validation under-predicts what composition determines. Built in 1412 s |
 | 2026-10-07 | submission_v4_lags.csv | lag series on classifier + both hurdle regressors, prior matching alpha 0.5. **Classifier 20 seeds; CLV columns were built at 5 seeds, not 20** -- a frozen default argument swallowed the seed override (found 9 Oct, see notes). Re-measured at matched seeds the difference is +0.00021 in score, so the row stands | 0.5972 | 0.7458 | 0.5169 | **0.3045** | score 0.29119; best candidate at the time, not selected |
 | 2026-10-07 | submission_v4_hybrid.csv | hybrid: lag labels + v3 regressions | 0.5996 | 0.7451 | 0.5169 | **0.3052** | submitted twice, identical score 0.305152978 = F1 0.528896416 / rmse 0.593163991 / 0.723339664, rank 49. **Bb8Js9A2** was the pre-promotion composition; **rjQUYHF9** is the `--recipe v4_hybrid` output and was the **selected** one of the two, until gmpjvZn9 replaced it as pick 2 on 12 Oct. validation 0.29068 |
 | 2026-10-07 | submission_diag_r1_bundle.csv | v3 labels + R1 bundle regressions (f3f4 features, CatBoost magnitude). CLV built at **5 seeds, not 20** -- same frozen-default bug | 0.6003 | 0.7443 | 0.5173 | 0.3022 | **diagnostic, not for selection** (track R best non-passer, +0.00086 at 5 seeds) |
@@ -90,7 +90,7 @@ remains the best candidate at 0.28929.
 
 ## Final picks and the v4_hybrid lineage
 
-**Selected on Zindi: `nskGdBPf` (v5_fuel2) and `gmpjvZn9` (v5_fuel2_a050).**
+**Selected on Zindi, final: `aUswGpyi` (v6_clf, alpha 0.75) and `YtE13kSr` (v6_clf_a050, alpha 0.5).** Locked 14 Oct 2026 -- see [Final selection](#final-selection). The 12 Oct pair `nskGdBPf` + `gmpjvZn9` was superseded on 13 Oct and is **not selected**; the history below is kept as the lineage that led there.
 
 Updated 12 Oct. `v5_fuel2` replaced `A37bufRz` via `v5_fuel`: the three files
 share a byte-identical Opportunity column (alpha 0.75 on the lag classifier) and
@@ -112,8 +112,12 @@ one parameter the evidence is split on.
 | `submission_v4_simple.csv` | 8ii1ZeJp | 0.304851105 | 0.28796 | submitted, mid-band, not selected |
 | `submission_diag_v5_reg.csv` | p7G9LVTM | 0.309155505 | **0.29188** | diagnostic, **not adopted** (both-targets clause failed) |
 | `submission_v5_fuel.csv` | **DapJS5NA** | **0.309714414** (rank 31) | **0.29148** | superseded by v5_fuel2 |
-| `submission_v5_fuel2.csv` | **nskGdBPf** | **0.309785160** | **0.29178** | **SELECTED pick 1** |
-| `submission_v5_fuel2_a050.csv` | **ai8DbQB7**, **gmpjvZn9** | **0.307223445** | **0.29151** | **SELECTED pick 2** (`gmpjvZn9`) |
+| `submission_v5_fuel2.csv` | **nskGdBPf** | **0.309785160** | **0.29178** | pick 1, 12-13 Oct, superseded by `aUswGpyi` |
+| `submission_v5_fuel2_a050.csv` | **ai8DbQB7**, **gmpjvZn9** | **0.307223445** | **0.29151** | pick 2, 12-13 Oct, superseded by `YtE13kSr` |
+| `submission_v6_reg.csv` | fFWfbjda | 0.308725795 | 0.29382 | sweep 11, both halves, **not adopted** |
+| `submission_v6_reg_a050.csv` | 8qCwUGQy | 0.307465421 | 0.29340 | the same at alpha 0.5, **not adopted** |
+| `submission_diag_v6_clf.csv` | **aUswGpyi** | **0.309807976** | **0.29270** | **FINAL pick 1** |
+| `submission_v6_clf_a050.csv` | **YtE13kSr** | **0.308547602** | **0.29227** | **FINAL pick 2** |
 
 \* the folds disagree about alpha 0.75: +0.0046 F1 on fold 1, -0.0032 on fold 2.
 
@@ -317,8 +321,9 @@ against the full selected set.
 0.723339664, Opportunity 0.535300706).
 
 The pre-registered test was that public CLV Fuel RMSE must improve on
-`DapJS5NA`'s 0.588231347. It did, by **-0.000175**, so v5_fuel2 replaces v5_fuel
-as selected pick 1. Non-fuel and Opportunity came back bit-identical for the
+`DapJS5NA`'s 0.588231347. It did, by **-0.000175**, so v5_fuel2 replaced v5_fuel
+as selected pick 1 on that date; it was itself superseded by `aUswGpyi` on
+13 Oct. Non-fuel and Opportunity came back bit-identical for the
 third time, confirming again that only the fuel column moved.
 
 **But look at the transfer ratio, because it is the real finding:**
@@ -514,7 +519,7 @@ inferred constants are confirmed as far as they can be without publication.
 `submission_v5_fuel2_a050.csv` was uploaded twice, as **ai8DbQB7** and
 **gmpjvZn9**, and both returned **0.307223445** -- identical to all nine digits,
 and identical to the value determined from composition *before* either upload.
-`gmpjvZn9` is the selected pick.
+`gmpjvZn9` was the selected hedge from 12 Oct until 13 Oct; it is **not** a final pick, having been superseded by `YtE13kSr`.
 
 | | value |
 | --- | --- |
@@ -625,17 +630,29 @@ for anything measured across dates.
 
 ## Final selection
 
-**Reselected 13 Oct 2026, 14:20 SAST**, by the public rule pre-registered and
-amended earlier the same day, before any of these scores existed.
+**Locked 14 Oct 2026.** Reselected 13 Oct 2026, 14:20 SAST by the public rule
+pre-registered and amended earlier the same day, before any of these scores
+existed; the second pick's Zindi ID arrived on 14 Oct and both scores are now
+measured. **These two are the final submissions. No other Zindi ID is
+selected.**
 
-- **Submission 1: `aUswGpyi`** -- `submission_diag_v6_clf.csv`, recipe
-  **`v6_clf`**: the regularised 17-class classifier with the **incumbent**
-  hurdles, prior matching at **alpha 0.75**. Public **0.309807976**,
-  validation 0.29270.
-- **Submission 2: the `v6_clf_a050` upload** -- `submission_v6_clf_a050.csv`,
-  recipe **`v6_clf_a050`**, the same at **alpha 0.5**. Public score
-  **predicted 0.308547602** before upload, by composition; Zindi ID to be
-  filled in after upload.
+| pick | file | recipe | alpha | Zindi ID | public | validation |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `submission_diag_v6_clf.csv` | `v6_clf` | 0.75 | **aUswGpyi** | **0.309807976** | 0.29270 |
+| 2 | `submission_v6_clf_a050.csv` | `v6_clf_a050` | 0.5 | **YtE13kSr** | **0.308547602** | 0.29227 |
+
+- **Pick 1, `aUswGpyi`** -- the regularised 17-class classifier with the
+  **incumbent** hurdles, prior matching at **alpha 0.75**. The project's best
+  public score.
+- **Pick 2, `YtE13kSr`** -- the same at **alpha 0.5**. Its score was
+  **determined before upload** by composition and measured at exactly that
+  value, residual 7.8e-10; components F1 0.53220681 / rmse 0.588056839 /
+  0.723339664.
+
+The pair is **byte-identical on both CLV columns** and **318 of 5,488 labels
+apart** -- the alpha span, and the only parameter the evidence is split on. The
+pair therefore hedges that parameter rather than doubling down on it, which is
+deliberate: the final standing is the better private score of the two.
 
 **Two naming hazards, recorded because neither can be fixed on Zindi.**
 `aUswGpyi` was uploaded as a diagnostic and its Zindi description still says
@@ -712,9 +729,11 @@ conclusion**, and the challenge is resolved by the public rule pre-registered
 in [`notes.md`](notes.md) before any v6 file was uploaded, and amended there at
 13:18 SAST on 13 Oct while no v6 public score yet existed: the paired
 `v6_reg` minus `diag_v6_clf` reading decides **which** pair is the candidate,
-and a 0.3078 gate is then applied to **whichever file that branch selects**. `nskGdBPf` + `gmpjvZn9` remain the selected pair
-until that rule is evaluated against real public scores; nothing is reselected
-on validation alone, which is the rule the whole project has run on.
+and a 0.3078 gate is then applied to **whichever file that branch selects**.
+`nskGdBPf` + `gmpjvZn9` remained the selected pair until that rule was
+evaluated against real public scores; nothing was reselected on validation
+alone, which is the rule the whole project has run on. The rule was evaluated
+later that day and it reselected `aUswGpyi` + `YtE13kSr`.
 
 ### v6_clf_a050: its public score is predicted here, before upload
 
@@ -729,11 +748,18 @@ incumbent hurdles). So its score is **determined, not estimated**:
 where 0.532206808 is `v6_reg_a050`'s implied public F1 and 0.095664879 is
 `v5_fuel2`'s published RMSE half. If the upload returns anything other than
 **0.308547602** to about 1e-9, one of the three byte-identity claims behind it
-is wrong. That would make it the fourth such prediction in the project, after
-`v5_fuel`, `v5_fuel2_a050` and the two confirmed by inversion below.
+is wrong.
 
-It would also be **+0.001324 over `gmpjvZn9`**, which is where the whole of
-sweep 11's public value turns out to sit -- see the decomposition below.
+**Resolved 14 Oct: it returned 0.308547602**, uploaded as Zindi ID
+**`YtE13kSr`** -- a residual of 7.8e-10 against the determined 0.3085476022, so
+all three byte-identity claims held. Reported components F1 **0.53220681**,
+rmse fuel **0.588056839**, non-fuel **0.723339664**; the F1 inverts from the
+score to 0.5322068075, agreeing with Zindi's figure to 2.5e-9, and the two
+reported RMSEs reproduce the constant 0.095664879 to 2.2e-10. Nothing above
+was edited after the upload.
+
+It is also **+0.001324 over `gmpjvZn9`**, which is where the whole of sweep
+11's public value turns out to sit -- see the decomposition below.
 
 ### The three v6 files, verified 13 Oct
 
