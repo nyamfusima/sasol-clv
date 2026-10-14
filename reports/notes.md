@@ -3392,6 +3392,201 @@ pre-registration forbids -- and alpha-not-retuned is the only reason the sweep
 So a fourth model family and three blends leave the classifier where sweep 11
 left it. **Closed.**
 
+## External screens, 14 Oct (outside the repo, all negative)
+
+Five screens run outside the repo on the same day as the model-family blend
+recorded above, which is kept separate because it was the only one with a
+positive F1 cell. Nothing here was added to the repo and no file was built.
+Figures are fold 2025-06 / fold 2025-09 throughout.
+
+### a) The true-mix diagnostic: knowing the class mix exactly is worth ~0
+
+The most useful of the five, because it bounds a lever rather than testing a
+feature. Prior matching targets a **projected** class mix built from past
+cutoffs (`project_mix.py`); that projection is stale by construction. This
+screen replaces it with the fold's **actual** mix -- an oracle no submission
+could ever have -- and asks what the oracle is worth:
+
+| decision rule | F1 2025-06 | F1 2025-09 |
+| --- | --- | --- |
+| true mix, alpha 1 (exact matching to the oracle) | 0.5025 | 0.5089 |
+| **stale mix, alpha 0.75 (what ships)** | **0.5075** | **0.5148** |
+| true mix, alpha 0.75 | +0.0007 | -0.0006 |
+
+Two readings, and the second is the one that matters. First, matching the
+oracle mix **exactly** is *worse* than damped matching to the stale one, by
+0.0050 and 0.0059 -- the damping is not compensating for a bad projection, it
+is doing something else, which is consistent with the sharpness story in sweep
+11 and the blend screen. Second, and decisively: swapping the stale mix for the
+oracle at the shipped alpha moves F1 by **+0.0007 and -0.0006**, which is zero.
+
+**So the entire prior-matching apparatus, handed a perfect class mix, buys
+nothing.** That closes the decision rule as a source of remaining gain, and it
+closes it with an upper bound rather than another null result. The +0.0138 of
+public F1 that separates us from 10th is therefore **probability quality, not
+decision tuning** -- there is no version of the mix projection, and no alpha,
+that reaches it.
+
+### b) Forward-time stacking -- worse on both folds
+
+Five forecasts fitted on the training cutoffs and fed to the classifier as
+features: fuel log-ratio, non-fuel log-ratio, P(inactive), P(adopt), P(fuel
+growth).
+
+| | 2025-06 | 2025-09 |
+| --- | --- | --- |
+| multi-logloss | **+0.0058** | **+0.0040** |
+| F1 alpha 0.75 | +0.0007 | +0.0007 |
+| F1 alpha 0.5 | -0.0026 | -0.0026 |
+
+Logloss is clearly worse on both folds. Giving the classifier a model's own
+forecast of the thing it is predicting adds error, not information -- the
+forecasts are built from the same snapshot the classifier already sees.
+**Closed.**
+
+### c) Station context -- mixed logloss, F1 inside noise
+
+Primary-station share, diesel share, station recency, traffic trend, active
+customers, new-customer share, and a time-safe station label mix taken from the
+c-3m snapshot so no label from the scored window can leak.
+
+| | 2025-06 | 2025-09 |
+| --- | --- | --- |
+| multi-logloss | -0.0007 | **+0.0043** |
+| F1 alpha 0.75 | +0.0007 | +0.0029 |
+| F1 alpha 0.5 | +0.0017 | +0.0004 |
+
+Logloss improves on one fold and worsens on the other by six times as much, so
+it fails the both-folds standard. The F1 cells are all positive but all under
++0.003, which is the band this project has repeatedly watched evaporate. Worth
+recording that the station aggregates were built time-safely and still did
+nothing: the station a customer uses carries little about that customer beyond
+what their own history already says. **Closed.**
+
+### d) Customer ID as a numeric feature -- nothing
+
+A deliberate leak-hunt rather than a modelling idea: if IDs were assigned in
+any order correlated with tenure or region, a raw numeric ID would pick it up.
+Inactivity AUC **0.9210 -> 0.9214** and **0.9220 -> 0.9218** -- up by 0.0004 on
+one fold, down by 0.0002 on the other. **There is no ID ordering signal**,
+which is also a small reassurance about the split. **Closed.**
+
+### e) A regularisation grid around v6 -- sweep 11 was already at the optimum
+
+Sweep 11 pre-registered one configuration and adopted it; this asks whether a
+tighter one was available.
+
+| variant | logloss | F1 |
+| --- | --- | --- |
+| num_leaves 4, min_child_samples 200, reg_lambda 10 | -0.0013 / -0.0002 | negative |
+| `extra_trees` | **+0.025** | -- |
+
+The tighter grid point improves logloss slightly on both folds and makes F1
+**worse**, which is the sweep 11 interaction again with the sign reversed:
+better probabilities, worse decisions. `extra_trees` is a disaster at +0.025.
+Neither is adoptable and the second is not close. **Closed** -- and it means
+sweep 11's single pre-registered setting was, as far as five further points can
+tell, already at the useful optimum.
+
+### What the five say together
+
+Four of the five are features or settings and they are all negative, which is
+the eleventh sweep's worth of evidence that the feature side is exhausted. The
+fifth is different in kind: the true-mix diagnostic shows the **decision rule
+is exhausted too, under an oracle**. Between them they leave exactly one place
+for the remaining +0.0138: the quality of the 17-class probabilities
+themselves. Sweep 12 is the last cheap test of that.
+
+## Sweep 12: classifier feature subsampling (14 Oct)
+
+**Pre-registered. This section was written and committed before the 20-seed
+test was run** -- commit history shows it landing together with
+`src/sweep12.py` and before any `confirm` key exists in `preds/sweep12.json`
+(see the harness note at the end of this section).
+
+`colsample_bytree` is the one classifier knob sweep 11 left alone. Sweep 11
+moved `num_leaves`, `min_child_samples` and `reg_lambda` and kept the 0.7 that
+was set by hand on day one. An external screen (base 97 features, 3 seeds,
+everything else as v6_clf) says 0.7 -> 0.4 is worth something:
+
+| | 2025-06 | 2025-09 |
+| --- | --- | --- |
+| multi-logloss | -0.0005 | -0.0006 |
+| F1 alpha 0.75 | **+0.0056** | **+0.0026** |
+| F1 alpha 0.5 | +0.0024 | -0.0031 |
+
+**The shape of this lead is the reason to distrust it.** The logloss moves
+0.0005 and the F1 moves 0.0056 -- an order of magnitude more. Every time this
+project has seen that shape, the F1 has been the decision rule reacting to a
+sharpness change rather than a better model: sweep 11 (validation +0.0009 ->
+public +0.0000228), the model-family blend above, and the regularisation grid
+in (e), where the same mismatch appears with the sign flipped. Alpha 0.5 also
+disagrees with alpha 0.75 across folds, which is the alpha interaction's
+signature. So the F1 gain is treated as **likely decision noise until 20 seeds
+say otherwise**.
+
+### The test
+
+- **Arm A** = `v6_clf` as shipped, i.e. `aUswGpyi`: lag classifier,
+  `num_leaves` 7, `min_child_samples` 100, `reg_lambda` 5, 400 trees, lr 0.03,
+  `colsample_bytree` **0.7**; incumbent `v5_fuel2` hurdles.
+- **Arm B** = identical except classifier `colsample_bytree` **0.4**.
+
+The gate and magnitude models are **not touched**. Regression changes have
+failed to transfer twice (sweep 11's hurdle half, the r1 bundle), so the
+hurdles stay at the incumbent and both arms keep CLV byte-identical to
+`submission_v5_fuel2.csv`. That also makes the arithmetic exact: with the RMSE
+half fixed the score is affine in F1, so `score_delta = 0.4 * F1_delta`
+identically, and the test is a **pure paired F1 comparison**. `src/sweep12.py`
+asserts that identity at runtime rather than assuming it.
+
+Straight to **20 seeds (42-61)**, both folds -- no 5-seed screen, because the
+quantity in question is of the same size as the seed noise that a 5-seed screen
+has twice failed to resolve.
+
+### Pre-registered keep rule, all three required
+
+1. mean score gain **>= +0.0015** at alpha 0.75;
+2. **better on both folds** at alpha 0.75;
+3. **multi-logloss not worse on either fold**.
+
+Conditions 1 and 2 are the project standard. **Condition 3 is new**, and it is
+the lesson of sweep 11 written into a rule: sweep 11 passed 1 and 2 at 20 seeds
+on both folds and still lost 0.00106 on the public board, and the one thing it
+could never show was a probability-quality gain big enough to explain its F1
+movement. A change that improves decisions without improving probabilities is
+now required to prove the probabilities too.
+
+Alpha is **not retuned** -- 0.75 and 0.5 exactly as they ship. One setting
+only, no grid.
+
+### If it passes
+
+Recipes `v7_clf` (alpha 0.75) and `v7_clf_a050` (alpha 0.5, built only if arm
+B's mean gain over A at alpha 0.5 is **>= 0**). Both built with
+`--skip-validation` and checked by `check_submission.py` for format, CLV
+byte-identity against `submission_v5_fuel2.csv`, label churn against
+`submission_diag_v6_clf.csv`, and sha256.
+
+**The public rule, pre-registered here before any upload:**
+
+> `v7_clf` public **minus 0.309807976** (`aUswGpyi`) **>= -0.0010** -> the picks
+> become `v7_clf` + `v7_clf_a050`, or `v7_clf` + `YtE13kSr` if the a050 file was
+> not built. Otherwise the picks stay **`aUswGpyi` + `YtE13kSr`**.
+
+Because CLV is byte-identical, that public difference is a **pure paired F1
+comparison** on ~1,650 rows, with no regression term to confound it -- the same
+construction that made the sweep 11 decomposition exact to 0.00e+00.
+
+### Harness note, recorded for completeness
+
+`src/sweep12.py` was smoke-tested at **1 seed** before the 20-seed run, to
+check the code path end to end (one classifier fit per arm per fold, the shared
+hurdles, the alpha decode, the assertion that score is affine in F1). A 1-seed
+reading is not a result and is not recorded as one; it is not in
+`preds/sweep12.json` under either reported key. The rule above is the one in
+the `sweep12.py` docstring, which was written before anything was run at all.
+
 ## Open questions, both now answered
 
 **Does higher or lower win on the leaderboard?** Higher. Confirmed on the board
