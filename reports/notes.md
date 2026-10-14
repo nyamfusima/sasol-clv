@@ -3714,6 +3714,124 @@ has no headroom under an oracle, and the probability side has headroom worth
 about +0.0005 of score, a third of the keep bar and a fraction of the gap to
 the leaders.** Modelling is closed.
 
+## External screens, 14 Oct evening (outside the repo, both negative)
+
+Two more, run after sweep 12 closed. Both are **outside the repo on the base 97
+features at 3 seeds**, so they do not override the in-harness numbers in track
+D or sweep 10 -- they sit beside them as a coarser, wider reading. Nothing was
+added, nothing was built, nothing was submitted. **The picks are unchanged.**
+
+### a) The alpha curve, end to end: the shipped pair brackets the peak
+
+The regularised classifier with stale-target prior matching, swept across the
+damping exponent. Weighted F1:
+
+| alpha | 2025-06 | 2025-09 | mean | vs alpha 0.75 |
+| --- | --- | --- | --- | --- |
+| 0 (no matching at all) | 0.5022 | 0.5076 | 0.5049 | -0.0063 |
+| 0.25 | 0.5052 | 0.5128 | 0.5090 | -0.0022 |
+| **0.5** | 0.5076 | **0.5177** | **0.5126** | **+0.0014** |
+| **0.6** | **0.5087** | 0.5165 | **0.5126** | **+0.0014** |
+| 0.75 (pick 1) | 0.5075 | 0.5148 | 0.5112 | -- |
+| 0.9 | 0.5056 | 0.5093 | 0.5075 | -0.0037 |
+| 1.0 (exact matching) | 0.5038 | 0.5056 | 0.5047 | -0.0065 |
+| 1.25 (over-correction) | 0.4933 | 0.4969 | 0.4951 | -0.0161 |
+
+Four things, in order of how much they matter.
+
+**1. The curve is single-peaked at 0.5-0.6 and the two shipped alphas bracket
+it.** The picks are 0.75 and 0.5; the peak is 0.5-0.6, reported as a tie at
+0.5126 and in fact 0.51265 against 0.51260 -- alpha 0.5 ahead by 0.00005, which
+is a tie for any purpose. So pick 2 sits *on* the validation optimum (just) and
+pick 1 sits 0.0014 above it.
+Hedging alpha was already justified by the fold disagreement; this says the
+hedge also straddles the curve's maximum rather than sitting to one side of it.
+
+**2. Above 0.75 the decline is monotone and then steep**, -0.0037 at 0.9,
+-0.0065 at 1.0, -0.0161 at 1.25. This is the screen's actual job. The public
+board preferred alpha 0.75 to 0.5 by +0.0064 of F1, and the obvious temptation
+is to read that as a gradient and push higher. **Validation says there is no
+gradient to push** -- 0.75 is already past the peak and 0.9 is off a ledge. The
+public preference for 0.75 over 0.5 does **not** license going above 0.75, and
+retuning alpha against the board is forbidden by the sweep 11 pre-registration
+anyway. Picks unchanged.
+
+**3. Exact matching is worth nothing over no matching at all.** alpha 1.0 means
+0.5047 against alpha 0's 0.5049 -- the IPF machinery, run to convergence and
+applied undamped, is **0.0002 worse than not running it**. Every bit of its
+value is in the damping: +0.0077 from alpha 0 to the peak, all of it bought by
+applying the correction partially. That is a sharper version of what the README
+already says about IPF being worth about nothing over a single constant, and it
+agrees with this morning's true-mix diagnostic, where matching an **oracle**
+mix exactly was still worse than damped matching to the stale one. The
+consistent story across both screens: prior matching is not really
+prior-matching -- it is a sharpness correction that happens to be parameterised
+by a class mix.
+
+**4. alpha 1.25 is actively destructive**, -0.0098 below doing nothing at all.
+Over-correcting past the target mix is worse than ignoring it, which is the
+expected shape if the mechanism is sharpness rather than calibration.
+
+The folds still disagree about the peak's location -- 2025-06 peaks at 0.6,
+2025-09 at 0.5 -- as they have since track D. But they now agree on the one
+thing that was open: **both put the peak below 0.75.** Track D's in-harness
+curve on the lag classifier gave the mean to 0.75 (0.5139 against 0.5132);
+this coarser curve on a different classifier and feature set gives it to
+0.5-0.6. The two disagree about the peak by one grid step, which is why alpha
+remains the parameter the picks hedge instead of the parameter they choose.
+
+### b) Rare-class override: 14 of 17 classes are rankable and unmonetisable
+
+The sharpest remaining question about the label side: the model essentially
+never predicts 14 of the 17 classes, so is that a ranking failure or a
+weighted-F1 arithmetic problem? Separated here into the two halves.
+
+**The ranking half works.** One-vs-rest binaries for the 14 small classes reach
+**AUC 0.73-0.89**. They know which customers are the candidates. And the
+headroom, if those rankings were free to use, is large: a per-class top-k
+oracle bound gives **+0.034 / +0.040 of weighted F1** -- about 25x the keep bar
+and nearly three times the entire gap to 10th place.
+
+**The arithmetic half destroys it.** Overriding the incumbent decision with
+each small class's top-k rows -- k = f x stale-mix support, f from 0.25 to 1.5,
+ranked either by the multiclass probability or by the class's own binary model
+-- **loses at every single setting**, from **-0.0003 to -0.0126** of mean
+weighted F1, at both alphas.
+
+| | best case | worst case |
+| --- | --- | --- |
+| upper bound, cost ignored | +0.040 | +0.034 |
+| realised, cost included | **-0.0003** | **-0.0126** |
+
+That bound is computed ignoring cost, and **the cost is the whole story**: every
+row handed to a small class is taken from one of the three big classes, where
+the incumbent was usually right. Weighted F1 weights by support, so the three
+big classes dominate the metric, and the trade is never favourable at any k and
+under either ranking. Note the best case is -0.0003, which is the limit as the
+override shrinks to nothing: the function has no interior maximum above zero.
+
+So the 14 small classes are **rankable but unmonetisable**, which is exactly
+what block C found with an oracle and what track D found when it tried to match
+six classes instead of four. Third independent confirmation, now with the
+rankings measured rather than assumed. **Closed.**
+
+### Where this leaves the decision rule
+
+Three screens in one day have bounded it from three directions:
+
+| screen | lever | worth |
+| --- | --- | --- |
+| true mix (morning) | a perfect class mix | **~0** (+0.0007 / -0.0006) |
+| alpha curve (evening) | the damping exponent | peak is **0.0014** above pick 1, and below it |
+| rare-class override (evening) | using the 14 small classes | **negative at every setting** |
+
+The target, the exponent and the class coverage are the only three things prior
+matching has to offer, and all three are now measured and empty. Taken with
+sweep 12 bounding the probability side at about +0.0005 of score, there is no
+remaining lever in this project worth a submission slot. **Modelling is
+closed**, and these screens are recorded as the reason it can be said flatly
+rather than hopefully.
+
 ## Open questions, both now answered
 
 **Does higher or lower win on the leaderboard?** Higher. Confirmed on the board
