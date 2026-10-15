@@ -3832,6 +3832,67 @@ remaining lever in this project worth a submission slot. **Modelling is
 closed**, and these screens are recorded as the reason it can be said flatly
 rather than hopefully.
 
+## Sweep 11's regression half, attributed (15 Oct)
+
+`fFWfbjda`'s public components were read off Zindi on 15 Oct at 09:14 -- fuel
+**0.588850671**, non-fuel **0.725407836**, Opportunity **0.535357746** -- and
+they resolve the one quantity the record could not derive. The decomposition on
+13 Oct measured the regression half at **-0.001082181** but could not say which
+target it came from.
+
+| | v5_fuel2 | v6_reg | delta | score |
+| --- | --- | --- | --- | --- |
+| RMSE fuel | 0.588056839 | 0.588850671 | +0.000793832 | **-0.000321824** |
+| RMSE non-fuel | 0.723339664 | 0.725407836 | +0.002068172 | **-0.000760357** |
+| total | | | | **-0.001082181** |
+
+The split sums to the measured half to **1.4e-10**.
+
+**The sharpest statement of the sweep 11 transfer failure that the data
+supports.** Validation, at 20 seeds on both folds, said the regularised hurdles
+improved **all four** RMSE/fold combinations. The public board says **both
+targets got worse**, and the non-fuel target -- the one sweep 11 had the least
+reason to touch, since it was never given renewal features and sat on the base
+97 throughout -- took **2.4x** the damage. This is no longer "a regression
+change that did not transfer"; it is a change that **reversed sign on both of
+its targets independently**, which is a stronger claim and the one to carry
+forward.
+
+Three predictions written before the reading existed all held: the inverted F1
+to 3e-9, the constraint line `fuel/0.74 + nonfuel/0.816 = 1.684724340` to
+1.2e-9, and the score rebuilt from the components to 1.0e-9. The byte-identity
+machinery this project has leaned on since v5_fuel is now confirmed against a
+reading it could not see.
+
+### The mix rule did not fire
+
+A rule pre-registered before the reading would have built a mixed submission --
+`v6_clf`'s labels, the improved target's regularised hurdle, `v5_fuel2`'s other
+column -- if **either** target had improved. Neither did, so **nothing was
+built**, no per-target regression parameters were added to
+`make_submission.py`, and the picks stay `aUswGpyi` + `YtE13kSr`. One half of
+this was already forced: the constraint line put the normalised RMSE sum
+0.003607269 worse than `v5_fuel2`'s, so both targets improving was arithmetically
+impossible. The reading settled that neither did.
+
+### The non-fuel hurdle has never been beaten
+
+Two independent attempts, both worse on the public board:
+
+| CLV_nonfuel | public RMSE | vs the incumbent |
+| --- | --- | --- |
+| **base 97 features, default params (v3 onward)** | **0.723339664** | **best** |
+| renewal features (`p7G9LVTM`) | 0.724859897 | +0.001520 |
+| regularised (`fFWfbjda`) | 0.725407836 | +0.002068 |
+
+The incumbent non-fuel hurdle is the oldest surviving component in the final
+picks -- unchanged since v3 on 6 Oct -- and it is now the only one that has
+survived every attempt on it. The fuel hurdle, by contrast, improved twice
+(base -> r1 -> r1+r2+r3, 0.00511 in total) before regularisation reversed it.
+Taken with sweep 12 and the three decision-rule screens, this closes the last
+component-level question in the project: **there is no uploaded column, on
+either target, better than the two the picks already carry.**
+
 ## Open questions, both now answered
 
 **Does higher or lower win on the leaderboard?** Higher. Confirmed on the board
