@@ -3943,3 +3943,107 @@ internal bar and still lost 0.00106.
   repo has been fitted to the ~3,838 private customers, and the public
   readings that drove the last two selections are themselves ~1,650-row
   measurements with a paired noise floor of about 0.0005.
+
+## Sweep 14 pre-registered: a binary Fuel-growth-vs-Stable specialist (18 Oct)
+
+Written **before any sweep-14 number existed** and committed before the run.
+Branch `exp/sweep14-fuel-specialist`, off `main` at d4b6ace. Sweep 13's record
+lives on its own branch and is not merged here. Public standing: rank 51 on an
+unchanged 0.309807976; picks `aUswGpyi` + `YtE13kSr`.
+
+### Why this is not sweep 10
+
+Sweep 10 tested decision-side **gates** on this boundary -- multiply Fuel's
+score by a constant `m` and re-decide -- and found the off-diagonal large but
+**nearly symmetric** (340/327, 387/283, 307/344, 354/291), so moving the
+boundary trades one error for the other at close to 1:1, every oracle came in
+at a fifth of the bar, and seven of eight cross-fold readings were negative on
+at least one fold. **That closes re-thresholding. It does not close better
+discrimination.** A specialist that genuinely ranks the pair better shrinks
+*both* off-diagonal cells rather than trading them, and a threshold oracle
+cannot bound a ranking improvement. The ranking ceiling on this pair is a
+number the record does not contain; Gate 0 below computes it.
+
+### The honest tension, recorded before running
+
+Sweep 5 **L4 found one-vs-rest binaries estimate the group marginals WORSE
+than the single 17-class softmax** (-0.00289), and blocks C/E concluded the two
+classes "genuinely overlap in these features". A specialist is an OvR-shaped
+model, so L4 is direct evidence against this hypothesis. Set against it: a
+binary gets the full 400-tree budget on one decision instead of sharing
+gradient 17 ways with 11 classes starved, which is a real mechanism. Expected
+value is low; the test is cheap and the error block is the largest in the
+matrix. That is the whole case for spending one screen on it.
+
+### The error block being targeted, from the sweep 13 Phase 1 audit
+
+Shipped model, alpha 0.75, 4-group confusion:
+
+| pair cell | fold 2025-06 | fold 2025-09 |
+| --- | --- | --- |
+| Fuel -> Stable | 310 | 360 |
+| Stable -> Fuel | 330 | 290 |
+| **pair total** | **640 of 4,961 (12.9%)** | **650 of 5,238 (12.4%)** |
+
+### A gap in the repo this closes
+
+**The shipped `v6_clf` validation probabilities were never cached** -- sweep 11
+and 12 saved metrics only, so sweep 10 ran its gates on the *older* `lags20`
+and `r320` classifiers rather than on the shipped model. This script
+regenerates them against the real shipped baseline and caches them to
+`preds/proba_v6clf{n}_{fold}.parquet`.
+
+### Procedure
+
+Leakage safety: the specialist trains only on snapshots whose 3-month outcome
+window ends on or before the fold cutoff, through the same `trainable_for` the
+17-class model uses, on the same base+lag features, and never sees validation
+labels. Specialist params are the shipped `V6_CLF`, **not tuned**, so the blend
+weight `w` is the only free parameter. **Alpha is NOT retuned.**
+
+**Gate 0, the ranking oracle.** Fix the pair conditional to the TRUTH for every
+row whose true label is Fuel or Stable, leave the other 15 classes untouched,
+run the shipped rule. This bounds *perfect* pair discrimination.
+
+**Gate 1, does the specialist rank better at all.** On rows whose true label is
+in the pair, AUC of the specialist's P(Fuel) against the 17-class implied
+conditional `p_fuel/(p_fuel + p_stable)`. A blend cannot add ranking
+information that is not there, so this is the decisive cheap test.
+
+**Gate 2, the blend.** Mass-preserving, one parameter, baseline at w=0:
+
+    s = p_fuel + p_stable                       (held fixed)
+    q = (1-w) * p_fuel/s + w * q_specialist
+    p_fuel <- s*q ; p_stable <- s*(1-q)         (other 15 untouched)
+
+Predeclared grid `w in {0.15, 0.30, 0.50}`.
+
+### Keep rule, all four required
+
+    1. Gate 0 mean oracle gain >= +0.005 weighted F1
+    2. Gate 1 specialist AUC > 17-class AUC on BOTH folds
+    3. both folds independently choose the same w
+    4. cross-fold (w chosen on 2025-06, scored on 2025-09) clears +0.0015
+       composite on BOTH folds at alpha 0.75
+
+Conditions 1 and 3 are **sweep 10's own protocol verbatim** -- oracle first,
+then both folds must agree on the constant, which is the test that closed block
+C and sweep 10 itself. Condition 4 is the project's standing bar. If condition
+1 fails the direction is closed whatever the blend table says. Criteria are not
+revised after the numbers are seen.
+
+### Baseline
+
+The shipped `v6_clf` classifier on the incumbent `v5_fuel2` hurdles. The
+hurdles are never refitted, so **both CLV columns stay byte-identical to
+`submissions/submission_v5_fuel2.csv`** and any public comparison against
+`aUswGpyi` would be an exact paired F1 comparison. 20-seed reference from sweep
+11's `B_clf` arm: logloss 1.287110 / 1.271238, F1 alpha 0.75 0.516613 /
+0.515749, score alpha 0.75 0.295423 / 0.289969. The screen runs at 5 seeds and
+compares against its own 5-seed w=0 arm, which is the paired comparison.
+
+### Expected runtime
+
+17-class bag 5 seeds both folds ~8 min; specialist ~2 min (1 tree per iteration
+against 17); all gates and blends no refits, seconds. Total ~11 min. Machine on
+AC mains, sleep and hibernate disabled, 471 min to the 02:00 deadline.
