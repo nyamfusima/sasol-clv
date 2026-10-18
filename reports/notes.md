@@ -4047,3 +4047,117 @@ compares against its own 5-seed w=0 arm, which is the paired comparison.
 17-class bag 5 seeds both folds ~8 min; specialist ~2 min (1 tree per iteration
 against 17); all gates and blends no refits, seconds. Total ~11 min. Machine on
 AC mains, sleep and hibernate disabled, 471 min to the 02:00 deadline.
+
+## Sweep 14 result: the specialist is a copy of the model it was meant to complement (18 Oct)
+
+5 seeds (42-46), both folds, 401s total. The specialist trained on 24,806
+(64.6%) and 33,241 (62.7%) pair rows, 44.7% and 45.3% Fuel. Shipped `v6_clf`
+validation probabilities regenerated and cached to
+`preds/proba_v6clf5_{fold}.parquet` (gitignored, local).
+
+### Gate 0: the ranking ceiling is enormous -- 30x the bar
+
+| fold | F1 baseline a0.75 | F1 with a perfect pair conditional | gain |
+| --- | --- | --- | --- |
+| 2025-06 | 0.5148 | **0.6634** | **+0.1486** |
+| 2025-09 | 0.5175 | **0.6641** | **+0.1466** |
+| mean | 0.5162 | 0.6638 | **+0.14758** |
+
+At alpha 0.5 the gains are +0.1510 / +0.1509. **This number was not in the
+record and it is the most useful thing this sweep produced.** Sweep 10's
+oracle was over thresholds and came in at a fifth of the +0.005 bar; the
+*ranking* oracle on the same pair is **+0.1476, thirty times that bar**. The
+two numbers are not in conflict -- they say that the boundary is in the right
+place and that the pair is, in principle, worth a great deal if it could be
+separated. For scale, +0.1476 of weighted F1 is **ten times the +0.0138 that
+separated `aUswGpyi` from 10th place** on the public board.
+
+So the direction passes its oracle, which is exactly what sweep 10 and block C
+did not. The question is entirely whether anything can capture it.
+
+### Gate 1: the specialist carries no information the 17-class model lacks
+
+| fold | true-pair rows | AUC, 17-class implied conditional | AUC, specialist | delta | **correlation** |
+| --- | --- | --- | --- | --- | --- |
+| 2025-06 | 2,774 | 0.8008 | 0.8011 | +0.0003 | **0.9915** |
+| 2025-09 | 2,839 | 0.8005 | 0.8007 | +0.0002 | **0.9936** |
+
+Condition 2 is scored PASS by the letter of the rule, and **it should not be
+read as a pass**. A +0.0002 AUC margin is far below any plausible noise floor,
+and the correlation of **0.99** is the real reading: a dedicated binary model,
+given the entire 400-tree budget on one decision and 25-33k training rows,
+reproduces the 17-class softmax's implied pair conditional almost exactly. Both
+sit at **AUC 0.80**.
+
+**This is the answer to the hypothesis.** The pair is not under-modelled by the
+17-class objective. The softmax already extracts essentially all of the
+pair-discriminating signal these features contain, so there is no complementary
+information for a blend to add -- which is why the blend table below is flat and
+sign-unstable rather than merely small.
+
+It also explains the two older results mechanically. Sweep 10 found the
+off-diagonal near-symmetric and blocks C/E found the classes "genuinely
+overlap": at AUC 0.80 against a 45% positive rate, the residual confusion is
+what an 0.80-AUC ranker must produce. The 640 and 650 misclassified rows are
+not a modelling failure to be fixed, they are the arithmetic of an 0.80 AUC.
+**Gate 0 and Gate 1 together localise the remaining gap precisely: it is
+pair-discriminating signal that is not in these features, not an objective, a
+model family or a boundary.**
+
+### Gate 2: the blend, and the pre-registered verdict
+
+| w | F1 06 | F1 09 | score 06 | score 09 | mean | d mean |
+| --- | --- | --- | --- | --- | --- | --- |
+| **0.0 (baseline)** | 0.5148 | 0.5175 | 0.29470 | 0.29067 | 0.29269 | - |
+| 0.15 | 0.5135 | 0.5176 | 0.29416 | 0.29070 | 0.29243 | **-0.00025** |
+| 0.30 | 0.5130 | 0.5181 | 0.29399 | 0.29090 | 0.29245 | **-0.00024** |
+| 0.50 | 0.5132 | 0.5183 | 0.29406 | 0.29100 | 0.29253 | **-0.00016** |
+
+alpha 0.75. **Every blend weight is negative on the mean**, and the structure
+is the familiar one: fold 2025-06 loses at every w, fold 2025-09 gains at every
+w, and the two never agree. At alpha 0.5 the means are +0.00026 / +0.00002 /
++0.00028 -- positive but non-monotone, roughly 5x below the bar, and the folds
+pick opposite ends of the grid.
+
+| condition | required | measured | result |
+| --- | --- | --- | --- |
+| 1. Gate 0 mean oracle gain >= +0.005 F1 | yes | **+0.14758** | **PASS** |
+| 2. Gate 1 specialist AUC > 17-class, both folds | yes | +0.0003 / +0.0002 | PASS by the letter, **not meaningful** |
+| 3. both folds choose the same w | yes | **0.15 / 0.50** | **FAIL** |
+| 4. cross-fold w=0.15 clears +0.0015 both folds | yes | **-0.00054 / +0.00003** | **FAIL** |
+
+**Sweep 14 FAILS.** Condition 3 is sweep 10's own agreement test, which this
+fails exactly as seven of sweep 10's eight gate variants did; condition 4 is
+negative on the selection fold. Criteria are the ones committed in `d7ce8a1`
+before the screen was read and are not revised here.
+
+### Stopped here, deliberately
+
+No follow-on sweep was launched and no second speculative model was tried, and
+the reason is Gate 1 rather than Gate 2. A blend weight cannot manufacture
+ranking information, so with the specialist at correlation 0.99 and AUC
++0.0002, no blend function, no weight grid, no seed count and no calibration
+stage on top of this specialist can reach the +0.0015 bar. Tuning the
+specialist's own hyperparameters would be tuning a model whose output is
+already a copy. **The cheap decisive gate did its job: it failed before any
+compute was spent on the expensive part.**
+
+The one thing that would reopen this is new pair-discriminating *features*, and
+that is the axis eleven sweeps and seven external screens have already closed.
+
+### Status
+
+**No file was built, no submission was made, nothing in `submissions/` was
+touched, `src/make_submission.py` is unmodified, the `final-submission` tag
+still points at `6a7b57d`, and sweep 13's branch remains frozen and unmerged.**
+The picks remain `aUswGpyi` + `YtE13kSr`. This work is on branch
+`exp/sweep14-fuel-specialist` in `src/sweep14.py` and `preds/sweep14.json`.
+
+### A by-product worth keeping
+
+The shipped `v6_clf` validation probabilities are now cached for the first time
+(`preds/proba_v6clf5_{fold}.parquet`, 5 seeds). Sweep 10 ran its entire gate
+analysis on the older `lags20` and `r320` classifiers because these did not
+exist. Nothing in sweep 10's verdict depends on that -- its conclusion was
+negative under both classifiers it did test -- but any future decision-side
+work should use these instead.

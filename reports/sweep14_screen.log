@@ -1,0 +1,37 @@
+
+--- sweep 14 screen, 5 seeds 42-46 ---
+    params (shared by both models, NOT tuned): {'n_estimators': 400, 'learning_rate': 0.03, 'num_leaves': 7, 'min_child_samples': 100, 'subsample': 0.8, 'subsample_freq': 1, 'colsample_bytree': 0.7, 'reg_lambda': 5}
+    blend grid w: (0.15, 0.3, 0.5)
+    17-class: cached -> preds\proba_v6clf5_2025-06-01.parquet
+  fold 2025-06-01: 38409 train rows / 10 snapshots, 4961 val rows
+    17-class [166s] | specialist on 24806 pair rows (64.6%, 44.7% Fuel) [10s]
+    Gate 1 AUC on 2774 true-pair rows: 17-class 0.8008 | specialist 0.8011 | delta +0.0003 | corr 0.9915
+    Gate 0 oracle: F1 a0.75 0.5148 -> 0.6634 (+0.1486)  a0.5 0.5125 -> 0.6634 (+0.1510)
+    17-class: cached -> preds\proba_v6clf5_2025-09-01.parquet
+  fold 2025-09-01: 53025 train rows / 13 snapshots, 5238 val rows
+    17-class [209s] | specialist on 33241 pair rows (62.7%, 45.3% Fuel) [12s]
+    Gate 1 AUC on 2839 true-pair rows: 17-class 0.8005 | specialist 0.8007 | delta +0.0002 | corr 0.9936
+    Gate 0 oracle: F1 a0.75 0.5175 -> 0.6641 (+0.1466)  a0.5 0.5150 -> 0.6660 (+0.1509)
+
+  --- alpha 0.75 ---
+       w    F1 06    F1 09   score 06   score 09       mean    d mean
+     0.0   0.5148   0.5175    0.29470    0.29067    0.29269  +0.00000  <- baseline
+    0.15   0.5135   0.5176    0.29416    0.29070    0.29243  -0.00025
+     0.3   0.5130   0.5181    0.29399    0.29090    0.29245  -0.00024
+     0.5   0.5132   0.5183    0.29406    0.29100    0.29253  -0.00016
+
+  --- alpha 0.5 ---
+       w    F1 06    F1 09   score 06   score 09       mean    d mean
+     0.0   0.5125   0.5150    0.29376    0.28969    0.29172  +0.00000  <- baseline
+    0.15   0.5136   0.5152    0.29420    0.28976    0.29198  +0.00026
+     0.3   0.5129   0.5147    0.29395    0.28955    0.29175  +0.00002
+     0.5   0.5129   0.5160    0.29392    0.29008    0.29200  +0.00028
+
+  --- keep rule ---
+  1. Gate 0 mean oracle F1 gain >= +0.005 : +0.14758 -> PASS
+  2. Gate 1 specialist AUC > 17-class, both folds : +0.0003 / +0.0002 -> PASS
+  3. both folds choose the same w                 : 0.15 / 0.5 -> FAIL
+  4. cross-fold w=0.15 clears +0.0015 both folds : -0.00054 / +0.00003 -> FAIL
+
+  ==> SWEEP 14 FAILS
+[sweep 14 took 401s]
