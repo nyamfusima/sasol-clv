@@ -1,0 +1,167 @@
+
+########## block audit ##########
+
+--- Phase 1 audit: shipped v6_clf, k=400, 5 seeds 42-46 ---
+    clf params: {'n_estimators': 400, 'learning_rate': 0.03, 'num_leaves': 7, 'min_child_samples': 100, 'subsample': 0.8, 'subsample_freq': 1, 'colsample_bytree': 0.7, 'reg_lambda': 5}
+
+  == fold 2025-06-01: 38409 train rows / 10 snapshots, 4961 val rows  [201s]
+     logloss 1.2875 | F1 a0.75 0.5148 | F1 a0.5 0.5125 | score a0.75 0.29470
+
+     -- alpha 0.75: per-class --
+                                           support  predicted  precision  recall     F1
+Stable                                        1463       1755     0.5430  0.6514 0.5923
+Existing-category growth: Fuel                1311       1435     0.4725  0.5172 0.4938
+Inactivity                                    1280       1204     0.7442  0.7000 0.7214
+Existing-category growth: Other                265        216     0.3102  0.2528 0.2786
+Existing-category growth: Beverages            141        152     0.1316  0.1418 0.1365
+Existing-category growth: Food & beverage      111        143     0.1329  0.1712 0.1496
+New category adoption: Other                    81         13     0.0000  0.0000 0.0000
+New category adoption: Beverages                58          5     0.4000  0.0345 0.0635
+New category adoption: Food & beverage          54         24     0.0417  0.0185 0.0256
+New category adoption: Lubricants               53          6     0.0000  0.0000 0.0000
+New category adoption: Snacking                 31          4     0.0000  0.0000 0.0000
+New category adoption: Confectionary            29          1     0.0000  0.0000 0.0000
+New category adoption: Breads & rolls           27          2     0.5000  0.0370 0.0690
+New category adoption: Tobacco                  22          1     0.0000  0.0000 0.0000
+New category adoption: Groceries                13          0     0.0000  0.0000 0.0000
+New category adoption: Braai & Ice              12          0     0.0000  0.0000 0.0000
+New category adoption: Ice-cream                10          0     0.0000  0.0000 0.0000
+
+     -- alpha 0.75: 4-group confusion (true rows) --
+             Fuel growth  Inactivity  Stable  Other
+true \ pred                                        
+Fuel growth          678         234     310     89
+Inactivity           265         896     101     18
+Stable               330          42     953    138
+Other                162          32     391    322
+     grouped F1: Fuel growth 0.4938 | Inactivity 0.7214 | Stable 0.5923 | Other 0.4369
+
+     -- alpha 0.5: per-class --
+                                           support  predicted  precision  recall     F1
+Stable                                        1463       1919     0.5232  0.6863 0.5937
+Existing-category growth: Fuel                1311       1324     0.4804  0.4851 0.4827
+Inactivity                                    1280       1328     0.7191  0.7461 0.7324
+Existing-category growth: Other                265        215     0.3116  0.2528 0.2792
+Existing-category growth: Beverages            141         74     0.1486  0.0780 0.1023
+Existing-category growth: Food & beverage      111         76     0.1447  0.0991 0.1176
+New category adoption: Other                    81          9     0.0000  0.0000 0.0000
+New category adoption: Beverages                58          1     0.0000  0.0000 0.0000
+New category adoption: Food & beverage          54          8     0.0000  0.0000 0.0000
+New category adoption: Lubricants               53          2     0.0000  0.0000 0.0000
+New category adoption: Snacking                 31          3     0.0000  0.0000 0.0000
+New category adoption: Confectionary            29          1     0.0000  0.0000 0.0000
+New category adoption: Breads & rolls           27          1     1.0000  0.0370 0.0714
+New category adoption: Tobacco                  22          0     0.0000  0.0000 0.0000
+New category adoption: Groceries                13          0     0.0000  0.0000 0.0000
+New category adoption: Braai & Ice              12          0     0.0000  0.0000 0.0000
+New category adoption: Ice-cream                10          0     0.0000  0.0000 0.0000
+
+     -- alpha 0.5: 4-group confusion (true rows) --
+             Fuel growth  Inactivity  Stable  Other
+true \ pred                                        
+Fuel growth          636         273     339     63
+Inactivity           207         955     107     11
+Stable               314          62    1004     83
+Other                167          38     469    233
+     grouped F1: Fuel growth 0.4827 | Inactivity 0.7324 | Stable 0.5937 | Other 0.3593
+
+  == fold 2025-09-01: 53025 train rows / 13 snapshots, 5238 val rows  [254s]
+     logloss 1.2715 | F1 a0.75 0.5175 | F1 a0.5 0.5150 | score a0.75 0.29067
+
+     -- alpha 0.75: per-class --
+                                           support  predicted  precision  recall     F1
+Inactivity                                    1436       1430     0.7434  0.7403 0.7418
+Existing-category growth: Fuel                1435       1361     0.4886  0.4634 0.4757
+Stable                                        1404       1714     0.5169  0.6311 0.5683
+Existing-category growth: Other                278        300     0.3033  0.3273 0.3149
+Existing-category growth: Beverages            188        237     0.1941  0.2447 0.2165
+Existing-category growth: Food & beverage      129        150     0.1800  0.2093 0.1935
+New category adoption: Beverages                63         13     0.1538  0.0317 0.0526
+New category adoption: Lubricants               54          6     0.1667  0.0185 0.0333
+New category adoption: Other                    52         10     0.3000  0.0577 0.0968
+New category adoption: Food & beverage          50         11     0.0909  0.0200 0.0328
+New category adoption: Confectionary            27          1     0.0000  0.0000 0.0000
+New category adoption: Snacking                 25          3     0.0000  0.0000 0.0000
+New category adoption: Ice-cream                23          0     0.0000  0.0000 0.0000
+New category adoption: Groceries                20          0     0.0000  0.0000 0.0000
+New category adoption: Breads & rolls           20          2     0.0000  0.0000 0.0000
+New category adoption: Tobacco                  20          0     0.0000  0.0000 0.0000
+New category adoption: Braai & Ice              14          0     0.0000  0.0000 0.0000
+
+     -- alpha 0.75: 4-group confusion (true rows) --
+             Fuel growth  Inactivity  Stable  Other
+true \ pred                                        
+Fuel growth          665         289     360    121
+Inactivity           253        1063     107     13
+Stable               290          44     886    184
+Other                153          34     361    415
+     grouped F1: Fuel growth 0.4757 | Inactivity 0.7418 | Stable 0.5683 | Other 0.4894
+
+     -- alpha 0.5: per-class --
+                                           support  predicted  precision  recall     F1
+Inactivity                                    1436       1500     0.7260  0.7584 0.7418
+Existing-category growth: Fuel                1435       1321     0.4868  0.4481 0.4666
+Stable                                        1404       1879     0.5019  0.6717 0.5745
+Existing-category growth: Other                278        288     0.3333  0.3453 0.3392
+Existing-category growth: Beverages            188        136     0.2059  0.1489 0.1728
+Existing-category growth: Food & beverage      129         89     0.2135  0.1473 0.1743
+New category adoption: Beverages                63          6     0.1667  0.0159 0.0290
+New category adoption: Lubricants               54          3     0.0000  0.0000 0.0000
+New category adoption: Other                    52          7     0.4286  0.0577 0.1017
+New category adoption: Food & beverage          50          4     0.0000  0.0000 0.0000
+New category adoption: Confectionary            27          0     0.0000  0.0000 0.0000
+New category adoption: Snacking                 25          3     0.0000  0.0000 0.0000
+New category adoption: Ice-cream                23          0     0.0000  0.0000 0.0000
+New category adoption: Groceries                20          0     0.0000  0.0000 0.0000
+New category adoption: Breads & rolls           20          2     0.0000  0.0000 0.0000
+New category adoption: Tobacco                  20          0     0.0000  0.0000 0.0000
+New category adoption: Braai & Ice              14          0     0.0000  0.0000 0.0000
+
+     -- alpha 0.5: 4-group confusion (true rows) --
+             Fuel growth  Inactivity  Stable  Other
+true \ pred                                        
+Fuel growth          643         320     392     80
+Inactivity           228        1089     112      7
+Stable               287          52     943    122
+Other                163          39     432    329
+     grouped F1: Fuel growth 0.4666 | Inactivity 0.7418 | Stable 0.5745 | Other 0.4384
+[block audit took 457s]
+
+########## block curve ##########
+
+--- sweep 13 horizon curve, 5 seeds 42-46, k in (50, 100, 150, 200, 250, 300, 350, 400, 500, 600, 700, 800, 1000) ---
+    clf params (n_estimators overridden): {'n_estimators': 400, 'learning_rate': 0.03, 'num_leaves': 7, 'min_child_samples': 100, 'subsample': 0.8, 'subsample_freq': 1, 'colsample_bytree': 0.7, 'reg_lambda': 5}
+    hurdles: incumbent v5_fuel2, 20 seeds, from sweep 11
+  fold 2025-06-01: 38409 rows, 5 fits at 1000 trees [534s]
+  fold 2025-09-01: 53025 rows, 5 fits at 1000 trees [637s]
+
+       k   logl 06   logl 09  logl mean  F1.75 06  F1.75 09 score.75 mean   F1.5 06   F1.5 09
+      50    1.3480    1.3340     1.3410    0.5081    0.5114       0.29013    0.5030    0.5019
+     100    1.2940    1.2843     1.2892    0.5089    0.5151       0.29102    0.5097    0.5070
+     150    1.2827    1.2731     1.2779    0.5128    0.5171       0.29220    0.5123    0.5161
+     200    1.2810    1.2702     1.2756    0.5135    0.5173       0.29238    0.5130    0.5164
+     250    1.2817    1.2696     1.2757    0.5117    0.5175       0.29205    0.5136    0.5162
+     300    1.2831    1.2697     1.2764    0.5147    0.5163       0.29242    0.5125    0.5168
+     350    1.2849    1.2704     1.2777    0.5149    0.5166       0.29252    0.5136    0.5169
+     400    1.2875    1.2715     1.2795    0.5148    0.5175       0.29269    0.5125    0.5150  <- shipped
+     500    1.2921    1.2737     1.2829    0.5085    0.5149       0.29089    0.5094    0.5153
+     600    1.2968    1.2765     1.2867    0.5083    0.5129       0.29047    0.5064    0.5130
+     700    1.3021    1.2794     1.2907    0.5057    0.5122       0.28980    0.5069    0.5127
+     800    1.3071    1.2821     1.2946    0.5075    0.5119       0.29011    0.5063    0.5123
+    1000    1.3150    1.2882     1.3016    0.5052    0.5126       0.28978    0.5056    0.5102
+
+  selection fold 2025-06-01 (sweep 2 A3 protocol): best logloss at k=200 (1.2810)
+  shipped k=400 on that fold: 1.2875
+  clean check fold 2025-09-01: k=200 1.2702 vs k=400 1.2715
+  alpha 0.75: score -0.00052 / -0.00009  mean -0.00031   (F1 -0.0013 / -0.0002)
+  alpha 0.5: score +0.00022 / +0.00052  mean +0.00037   (F1 +0.0006 / +0.0013)
+  logloss delta: -0.00653 / -0.00128  mean -0.00390
+
+  --- keep rule at k=200 (all four required) ---
+  1. logloss better on BOTH folds              : -> PASS
+  2. mean logloss gain >= 0.005                : +0.00390 -> FAIL
+  3. mean score gain >= +0.0015 at alpha 0.75 : -0.00031 -> FAIL
+  4. better on BOTH folds at alpha 0.75        : -> FAIL
+
+  ==> SWEEP 13 FAILS at k=200
+[block curve took 1171s]

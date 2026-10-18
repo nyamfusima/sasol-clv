@@ -4109,3 +4109,179 @@ arrived. The criteria above were already frozen verbatim in the
 `src/sweep13.py` docstring at launch and are unchanged here. The decisive
 20-seed confirmation had not started and did not start until this section was
 committed.
+
+## Sweep 13, Phase 1: per-class audit of the shipped classifier (18 Oct)
+
+5 seeds (42-46), k=400, the shipped `v6_clf` params, read through the shipped
+rule. Diagnosis only, nothing fitted. Fold 2025-06: 38,409 train rows over 10
+snapshots, 4,961 val rows, logloss 1.2875. Fold 2025-09: 53,025 rows over 13
+snapshots, 5,238 val rows, logloss 1.2715.
+
+### The three dominant classes, alpha 0.75
+
+| class | fold | support | predicted | precision | recall | F1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Inactivity | 2025-06 | 1280 | 1204 | 0.7442 | 0.7000 | **0.7214** |
+| Inactivity | 2025-09 | 1436 | 1430 | 0.7434 | 0.7403 | **0.7418** |
+| Stable | 2025-06 | 1463 | 1755 | 0.5430 | 0.6514 | 0.5923 |
+| Stable | 2025-09 | 1404 | 1714 | 0.5169 | 0.6311 | 0.5683 |
+| growth: Fuel | 2025-06 | 1311 | 1435 | 0.4725 | 0.5172 | **0.4938** |
+| growth: Fuel | 2025-09 | 1435 | 1361 | 0.4886 | 0.4634 | **0.4757** |
+
+Three readings worth keeping. **Inactivity is a solved class** and the only one
+whose predicted count tracks its support (1204/1280, 1430/1436) -- it is
+behaviourally distinct and the model finds it. **Stable is systematically
+over-predicted on both folds** (+292 and +310 rows, precision 0.52-0.54 against
+recall 0.63-0.65), so the rule buys Stable recall with Stable precision.
+**Fuel growth is the weakest big class on both folds**, with precision and
+recall both in 0.46-0.52; it is the class the leaderboard gap lives in and the
+one four separate screens have now failed to improve.
+
+**The errors are consistent across the two folds, not drifting.** Inactivity
+improves slightly over time (0.7214 -> 0.7418) while Stable and Fuel growth
+each lose about 0.02 (0.5923 -> 0.5683, 0.4938 -> 0.4757). Nothing in the
+confusion structure changes character between June and September, which rules
+out a time-varying failure as the explanation for the remaining gap.
+
+### The 4-group confusion is near-symmetric, on both folds
+
+alpha 0.75, true in rows:
+
+| fold 2025-06 | Fuel growth | Inactivity | Stable | Other |
+| --- | --- | --- | --- | --- |
+| Fuel growth | 678 | 234 | **310** | 89 |
+| Inactivity | 265 | 896 | 101 | 18 |
+| Stable | **330** | 42 | 953 | 138 |
+| Other | 162 | 32 | **391** | 322 |
+
+| fold 2025-09 | Fuel growth | Inactivity | Stable | Other |
+| --- | --- | --- | --- | --- |
+| Fuel growth | 665 | 289 | **360** | 121 |
+| Inactivity | 253 | 1063 | 107 | 13 |
+| Stable | **290** | 44 | 886 | 184 |
+| Other | 153 | 34 | **361** | 415 |
+
+Stable <-> Fuel growth is 310/330 on fold 1 and 360/290 on fold 2: large and
+**nearly symmetric**, which is exactly what sweep 10 found and closed with its
+own oracle. A symmetric off-diagonal cannot be fixed by moving a boundary --
+every row gained on one side is lost on the other -- so this independently
+re-derives sweep 10's result from the confusion matrix rather than from a
+gate search. The one clearly **asymmetric** block is Other -> Stable (391 and
+361 against 138 and 184 the other way), but "Other" is the 14 small classes,
+which the rare-class override already showed are unmonetisable at every k.
+
+**11 of 17 classes score exactly 0.0000 F1 on fold 2025-06** (7 on fold
+2025-09), with the model predicting 0-24 rows for each against supports of
+10-81. Fourth confirmation of rankable-but-unmonetisable.
+
+## Sweep 13 result: the hypothesis is right about probabilities and wrong about the score (18 Oct)
+
+The screen, 5 seeds (42-46), 13 grid points, both folds, one 1000-tree fit per
+seed per fold. Runtimes 534s and 637s. Hurdles never refitted.
+
+| k | logl 06 | logl 09 | logl mean | F1 .75 06 | F1 .75 09 | score .75 mean | F1 .5 06 | F1 .5 09 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 50 | 1.3480 | 1.3340 | 1.3410 | 0.5081 | 0.5114 | 0.29013 | 0.5030 | 0.5019 |
+| 100 | 1.2940 | 1.2843 | 1.2892 | 0.5089 | 0.5151 | 0.29102 | 0.5097 | 0.5070 |
+| 150 | 1.2827 | 1.2731 | 1.2779 | 0.5128 | 0.5171 | 0.29220 | 0.5123 | 0.5161 |
+| **200** | **1.2810** | **1.2702** | **1.2756** | 0.5135 | 0.5173 | 0.29238 | 0.5130 | 0.5164 |
+| 250 | 1.2817 | 1.2696 | 1.2757 | 0.5117 | 0.5175 | 0.29205 | 0.5136 | 0.5162 |
+| 300 | 1.2831 | 1.2697 | 1.2764 | 0.5147 | 0.5163 | 0.29242 | 0.5125 | 0.5168 |
+| 350 | 1.2849 | 1.2704 | 1.2777 | 0.5149 | 0.5166 | **0.29252** | 0.5136 | 0.5169 |
+| **400 (shipped)** | 1.2875 | 1.2715 | 1.2795 | 0.5148 | 0.5175 | **0.29269** | 0.5125 | 0.5150 |
+| 500 | 1.2921 | 1.2737 | 1.2829 | 0.5085 | 0.5149 | 0.29089 | 0.5094 | 0.5153 |
+| 600 | 1.2968 | 1.2765 | 1.2867 | 0.5083 | 0.5129 | 0.29047 | 0.5064 | 0.5130 |
+| 700 | 1.3021 | 1.2794 | 1.2907 | 0.5057 | 0.5122 | 0.28980 | 0.5069 | 0.5127 |
+| 800 | 1.3071 | 1.2821 | 1.2946 | 0.5075 | 0.5119 | 0.29011 | 0.5063 | 0.5123 |
+| 1000 | 1.3150 | 1.2882 | 1.3016 | 0.5052 | 0.5126 | 0.28978 | 0.5056 | 0.5102 |
+
+### The hypothesis was correct: the regularised classifier is still over-trained
+
+Multi-logloss has a **genuine interior minimum at k=200 on fold 2025-06 and
+k=250 on fold 2025-09** (k=200 is within 0.0006 of it), and the shipped k=400
+is past it on both. The curve is smooth and monotone on both sides across 13
+grid points, so this is a real optimum, not a lucky cell. Sweep 11 regularised
+away the capacity half of its over-training diagnosis and left the horizon half
+in place; the horizon half was still there.
+
+### And it does not pay, because logloss and F1 disagree about the horizon
+
+| | logloss-optimal k | F1(alpha 0.75)-optimal k |
+| --- | --- | --- |
+| fold 2025-06 | 200 | 350 |
+| fold 2025-09 | 250 | 400 |
+
+**The decision rule prefers a sharper -- more over-trained -- model than
+logloss does, by roughly a factor of two in the horizon, on both folds.** That
+is the single most useful thing this sweep produced. It is the sixth sighting
+of this project's recurring interaction and the first in which the sharpness
+knob is the boosting horizon rather than capacity (sweep 11), feature
+subsampling (sweep 12) or the damping exponent itself, and it gives a
+mechanism for why eleven sweeps of probability improvement kept failing to
+convert: prior matching plus argmax reads the ranking at the big-3 boundary,
+while logloss is also paying for the tails of a 17-way distribution where 11
+classes are never predicted. The two objectives are optimised at different
+horizons, so a probability gain is not a decision gain in this harness.
+
+### Verdict against the pre-registered rule: FAILS, 3 of 4 conditions
+
+k* = **200**, selected on fold 2025-06 by logloss exactly as pre-registered.
+
+| condition | required | measured | result |
+| --- | --- | --- | --- |
+| 1. logloss better on BOTH folds | yes | -0.00653 / -0.00128 | **PASS** |
+| 2. mean logloss gain >= 0.005 | yes | +0.00390 | **FAIL** |
+| 3. mean score gain >= +0.0015 at alpha 0.75 | yes | **-0.00031** | **FAIL** |
+| 4. better on BOTH folds at alpha 0.75 | yes | -0.00052 / -0.00009 | **FAIL** |
+
+Condition 3 is not merely short of the bar, it has the **wrong sign on both
+folds**. The criteria are the ones committed in `0346d52` before the screen was
+read, and they are not revised here.
+
+### No 20-seed confirmation was run, and the reason is measured rather than asserted
+
+The same k=400 arm measured at 5 seeds and at 20 seeds (sweep 11's `B_clf`)
+gives the seed-count noise directly:
+
+| quantity | fold 2025-06 | fold 2025-09 |
+| --- | --- | --- |
+| 5->20 seed movement, same k=400, F1 alpha 0.75 | **+0.00181** | **-0.00176** |
+| k=200 vs k=400 effect at 5 seeds, F1 alpha 0.75 | -0.00131 | -0.00022 |
+| 5->20 seed movement, logloss | -0.00043 | -0.00026 |
+| k=200 vs k=400 effect at 5 seeds, logloss | **-0.00653** | **-0.00128** |
+
+**The F1 half of this experiment is noise-dominated**: the horizon effect on F1
+is smaller than the movement caused by changing the seed count alone, on both
+folds. The logloss half is not -- it is 15x and 5x the seed noise, which is why
+the probability finding above is reported as real while the F1 deltas are not.
+
+Running 20 seeds would therefore refine a number that cannot reach the bar:
+condition 3 would have to travel **+0.0018 of score** from -0.00031 to +0.0015,
+and the quantity it depends on is already below its own noise floor. 70 minutes
+of compute was not spent to confirm that. **Sweep 13 is closed at the screen.**
+
+### One flagged observation, deliberately not acted on
+
+At k=200 the two alphas move in opposite directions, and for once both folds
+agree on each:
+
+| | fold 2025-06 | fold 2025-09 | mean |
+| --- | --- | --- | --- |
+| score delta, alpha 0.75 | -0.00052 | -0.00009 | -0.00031 |
+| score delta, alpha 0.5 | **+0.00022** | **+0.00052** | **+0.00037** |
+
+Alpha 0.5 improves on both folds. It is still **4x below the +0.0015 bar**, so
+it is not adoptable on validation, and the notes' standing caution applies with
+full force: the public board paid the regularised classifier 58x more at alpha
+0.5 than at alpha 0.75, which makes an alpha-0.5-shaped validation gain exactly
+the kind of result that tempts a retune. **Alpha was pre-registered as
+not-retuned and is not retuned.** Recorded as the sixth sighting of the
+interaction, not as a candidate.
+
+### Status
+
+**No file was built, no submission was made, nothing in `submissions/` was
+touched, `src/make_submission.py` is unmodified and the `final-submission` tag
+still points at `6a7b57d`.** The picks remain `aUswGpyi` + `YtE13kSr`. The work
+lives on branch `exp/sweep13-treecount` in `src/sweep13.py` and
+`preds/sweep13.json`.
