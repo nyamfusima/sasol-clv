@@ -3943,3 +3943,169 @@ internal bar and still lost 0.00106.
   repo has been fitted to the ~3,838 private customers, and the public
   readings that drove the last two selections are themselves ~1,650-row
   measurements with a paired noise floor of about 0.0005.
+
+## External screens, 18 Oct 17:20 (Claude's sandbox, outside the repo, both negative)
+
+Base 97 features, regularised LightGBM, 3 seeds, the shipped decision rule,
+both folds. Nothing was added to the repo, no file was built, no submission was
+made. Sandbox baseline, for scale only and **not** the harness baseline:
+logloss 1.2882 / 1.2715, F1 alpha 0.75 0.5075 / 0.5148.
+
+### a) Boundary-noise down-weighting -- negative
+
+Training rows labelled Stable or Fuel growth whose fuel-litres ratio (window
+against the previous quarter) sits within +/-0.15 log of the 1.25x growth
+threshold -- 10.4-10.9% of rows -- given sample weight 0.5. The premise is that
+rows straddling a hard threshold carry mislabelling noise, so the model should
+not be asked to fit them confidently.
+
+| | 2025-06 | 2025-09 |
+| --- | --- | --- |
+| multi-logloss | **-0.0010** | **+0.0018** |
+| F1 alpha 0.75 | -0.0003 | -0.0004 |
+| F1 alpha 0.5 | -0.0012 | -0.0020 |
+
+Logloss improves on one fold and worsens on the other by nearly twice as much,
+so it fails the both-folds standard, and every F1 cell is negative (score
+-0.00016 at alpha 0.75). **Closed.** This is the fourth independent result
+pointing at the Stable/Fuel boundary -- sweep 10 closed it with its own oracle,
+the rare-class override closed the small classes, and block C closed them with
+an oracle -- and the first to attack it through the training weights rather
+than the decision rule. The boundary is not noisy in a way that down-weighting
+can exploit.
+
+### b) Training-window truncation -- clearly worse
+
+The four oldest snapshots (Jun-Sep 2024) dropped from training.
+
+| | 2025-06 | 2025-09 |
+| --- | --- | --- |
+| multi-logloss | **+0.0100** | **+0.0055** |
+| F1 alpha 0.75 | -0.0057 | -0.0004 |
+| F1 alpha 0.5 | -0.0040 | -0.0015 |
+
+Worse on every cell of both folds, and the logloss damage is large by this
+project's standards -- +0.0100 is 37% of sweep 11's entire logloss *gain*, in
+the wrong direction. **The older snapshots help despite the cohort shift.**
+
+This is the third consistent reading on the same axis and the three now bracket
+it from both sides: sweep 2 A1 found recency weighting monotone in the
+half-life and converging to uniform weights **from below** (half-life 3mo
+-0.0034, 6mo -0.0006, 12mo +0.0001), sweep 2 A2 found cutting 13 snapshots to 5
+costs only -0.0006, and truncation now costs -0.00123 of score. Down-weighting
+old rows loses; deleting them loses more; keeping all of them at uniform weight
+wins. **The temporal training-window axis is closed** -- it was the one option
+in the 18 Oct brief that these screens retire outright.
+
+## Sweep 13 pre-registered: the boosting horizon of the regularised classifier
+
+Written **before any sweep-13 number existed**, and committed before the
+decisive run. Public standing at the time of writing: **rank 51** on an
+unchanged 0.309807976, commit d4b6ace, picks `aUswGpyi` + `YtE13kSr`.
+
+### Why this axis and not another
+
+Sweep 11 was motivated by a measured over-training curve: validation
+multi-logloss got **worse from 200 to 400 trees on both folds**. It fixed that
+by shrinking capacity -- `num_leaves` 15 -> 7, `min_child_samples` 30 -> 100,
+`reg_lambda` 0 -> 5 -- and pre-registered that "tree counts and learning rates
+do not move". So **the knob whose curve diagnosed the overfitting was held at
+the value that demonstrated it**, and has never been re-measured against the
+regularised model. Sweep 2 A3 did early-stop at 103..224 trees, but on the
+*unregularised* config, 5 seeds, base features, argmax F1 -- a different model,
+and A3's own lesson was that its selections had to be re-measured.
+
+Everything else on the classifier is closed by the record: features (11 sweeps
+plus the external screens of 12-15 and 18 Oct), model family and blends (L2,
+six families), label structure (L3/L4 -- 17 classes is the optimum), the
+decision rule (block H/I, sweep 7 E1, sweep 10, the alpha curve, the
+rare-class override, and the true-mix oracle which is worth ~0), calibration
+(I3 -- a global temperature is *algebraically* alpha), the training recipe
+(A1/A2 and the 18 Oct truncation screen above), and capacity (sweep 11, sweep
+12, the external regularisation grid). The record's own conclusion is that the
+only remaining axis is "the quality of the 17-class probabilities themselves".
+A boosting-horizon error is the one untested way to be wrong about that.
+
+**The risk, stated in advance.** Tree count is "how tightly the same model
+fits" -- the exact class of change that has never transferred in this project.
+Sweep 11 cleared every internal bar and lost 0.00106 on the board; sweep 12
+improved probabilities on both folds and was rejected. No transfer is predicted
+here. What justifies the slot is that the axis is genuinely untested, the whole
+curve is nearly free to measure, and the primary read is logloss rather than
+F1.
+
+### How it is measured, and why the curve is almost free
+
+LightGBM boosting is sequential and its subsampling RNG at iteration t depends
+only on iterations 1..t, so **trees 1..k of a 1000-tree fit are exactly the
+k-tree fit**. One fit per seed per fold therefore yields the entire horizon
+curve via `predict_proba(num_iteration=k)`. This was asserted rather than
+assumed before any result was read:
+
+| check | result |
+| --- | --- |
+| max abs diff, staged k=200 against a direct 200-tree fit, fold 2025-06, seed 42 | **0.000e+00** |
+
+Exact, not approximate. Runtime: 89s for a 1000-tree fit on fold 2025-06, 23s
+for a 200-tree fit.
+
+    arm A    k = 400, the shipped v6_clf (aUswGpyi) classifier
+    arm B    k = k*, chosen on fold 2025-06 ONLY
+
+The hurdles are never refitted. Both arms use the incumbent `v5_fuel2` hurdle
+RMSEs read from `preds/sweep11.json`, so any file built from this keeps **both
+CLV columns byte-identical to `submissions/submission_v5_fuel2.csv`** and the
+public comparison against `aUswGpyi` is an exact paired F1 comparison. With the
+RMSE half held fixed the score is affine in F1, so `score_delta == 0.4 *
+F1_delta` exactly; that identity is asserted at runtime. **Alpha is NOT
+retuned** -- 0.75 and 0.5 exactly as they ship.
+
+### Protocol
+
+Sweep 2 A3 recorded that fold 2025-06 is the only legitimate selection set for
+a tree-count choice, because early stopping spends it, and that anything chosen
+on fold 2025-09 must be re-measured before it can be believed. So **k* is
+chosen on fold 2025-06 by multi-logloss at the screen seeds, frozen, and fold
+2025-09 is the clean check.**
+
+### Keep rule, all four required
+
+    1. multi-logloss better on BOTH folds at k*
+    2. mean multi-logloss gain >= 0.005
+    3. mean composite score gain >= +0.0015 at alpha 0.75
+    4. better on BOTH folds at alpha 0.75
+
+Condition 2 is new to this sweep. Sweep 11's logloss gain was -0.0269 / -0.0161
+and it still did not transfer; sweep 12's was +0.00002 / -0.0031 and was called
+noise. **0.005 sits above sweep 12's larger fold movement and well below sweep
+11's**, so it admits only a genuine probability-quality gain. Conditions 3 and
+4 are the project's standing bar, unchanged.
+
+**If 1 and 2 pass while 3 or 4 fails**, that is reported as a probability gain
+that does not convert into decisions -- informative, and **not adoptable**.
+The criteria are not to be revised after the numbers are seen.
+
+### Baseline, 20 seeds (42-61), from sweep 11's `B_clf` arm
+
+`B_clf` *is* `v6_clf` as shipped, measured at 20 seeds on both folds.
+
+| fold | logloss | F1 a0.75 | F1 a0.5 | score a0.75 |
+| --- | --- | --- | --- | --- |
+| 2025-06 | 1.287110 | 0.516613 | 0.514386 | 0.295423 |
+| 2025-09 | 1.271238 | 0.515749 | 0.515848 | 0.289969 |
+| **mean** | **1.279174** | **0.516181** | 0.515117 | **0.292696** |
+
+### Time boxes (SAST, 18-19 Oct)
+
+Experiment verdict by **23:00**; if it passes, both files built and checked by
+**00:30**; upload and final decision by **01:30**. If a step overruns, it stops
+and reports rather than running on.
+
+### Honest note on ordering
+
+The Phase 1 per-class audit and the 5-seed screen were launched at 17:30, a few
+minutes **before** the instruction to write these criteria into notes.md
+arrived. The criteria above were already frozen verbatim in the
+`src/sweep13.py` docstring at launch and are unchanged here. The decisive
+20-seed confirmation had not started and did not start until this section was
+committed.
